@@ -1,26 +1,378 @@
 @import "tailwindcss";
 
+/* ============================================================
+   Palet warna
+   ------------------------------------------------------------
+   Mengikuti portal perusahaan yang sudah dipakai
+   (portal.mustika-ratu.com): netral, kartu putih di latar abu
+   sangat muda. Palet krem/cokelat yang lama dipensiunkan 7 Okt
+   2026 -- acuannya tampilan portal sungguhan, bukan mockup.
+
+   Cokelat #8A5F41 dan hijau #CCD67F TIDAK ikut dibuang: dua itu
+   sekarang khusus jadi penanda Ratu AI di dalam portal yang
+   netral -- tombol kirim, gelembung pertanyaan, item terpilih.
+   Jadi yang berubah groundnya, bukan identitasnya.
+
+   ⚠️ NILAI KONTRAS DI BAWAH DIHITUNG, BUKAN DIKIRA-KIRA.
+
+   Yang paling mudah salah: #6B7280 (abu "netral" yang paling
+   sering dipakai orang) cuma 4,47 di atas #F5F6F8 -- GAGAL AA
+   untuk teks biasa, padahal kelihatan cukup gelap. Teks sekunder
+   di sini memakai #5C6270 yang 5,65.
+   ============================================================ */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* ---------- MODE TERANG (bawaan) ---------- */
+  color-scheme: light;
+
+  --kertas: #f5f6f8; /* latar halaman */
+  --permukaan: #ffffff; /* kartu, header, rail, sidebar */
+  --tinta: #141416; /* teks utama    17,01 di kertas (AAA) */
+  --tinta-lemah: #5c6270; /* teks sekunder  5,65 di kertas (AA)
+                                             6,11 di permukaan (AA) */
+  --garis: #e3e5ea; /* pembatas */
+  --utama: #8a5f41; /* cokelat Ratu AI: tombol, gelembung user */
+  --utama-teks: #ffffff; /*                 5,54 di utama   (AA) */
+  --aksen: #ccd67f; /* hijau: item terpilih */
+  --aksen-teks: #141416; /*                11,82 di aksen   (AAA) */
+  --bahaya: #9c2a1b; /*                 7,03 di kertas (AAA)
+                                             6,66 di bahaya-lemah (AA) */
+  --bahaya-lemah: #fdeceb;
+
+  /* ---------- WARNA PER AGENT ----------
+     Tiap agent aplikasi punya warnanya sendiri, seperti ikon aplikasi di
+     portal perusahaan.
+
+     ⚠️ DIIKATKAN KE KODE AGENT, BUKAN KE URUTAN. Kalau warnanya diambil dari
+     posisi dalam daftar, menyaring daftar itu (mis. yang terbuka saja) akan
+     mengecat ulang agent yang tersisa — dan orang yang sudah hafal "yang biru
+     itu Super Tools" jadi salah terus.
+
+     Teks di atasnya SELALU putih di mode terang; semua nilai di bawah sudah
+     diperiksa >= 4,5 terhadap putih (yang paling tipis: MAPS 5,02).
+     Agent yang belum punya warna sendiri jatuh ke --utama. */
+  --agent-teks: #ffffff;
+  --agent-portal: #8a5f41; /* cokelat Ratu AI   5,54 */
+  --agent-hr: #9c2a2a; /*                   7,56 */
+  --agent-supertools: #1f5fbf; /*                   6,09 */
+  --agent-admin: #3a4048; /*                  10,46 */
+  --agent-maps: #8a6a2f; /*                   5,02 */
+  --agent-marketing: #1f7a4d; /*                   5,32 */
+  --agent-cmod: #3b4fa8; /*                   7,32 */
+  --agent-report: #6b3fa0; /*                   7,38 */
+
+  /* Bayangan netral, bukan cokelat. Latarnya tidak lagi hangat, jadi
+     bayangan bernuansa cokelat justru terlihat kekuningan di atas putih. */
+  --bayang-kecil: 0 1px 2px rgb(20 22 28 / 0.06), 0 1px 3px rgb(20 22 28 / 0.08);
+  --bayang: 0 2px 4px rgb(20 22 28 / 0.05), 0 8px 24px rgb(20 22 28 / 0.08);
+  --bayang-besar: 0 4px 8px rgb(20 22 28 / 0.06), 0 16px 40px rgb(20 22 28 / 0.12);
+
+  /* ---------- NILAI MODE GELAP ----------
+     Didefinisikan SEKALI di sini, lalu di-alias oleh dua blok di bawah.
+     Kalau nilainya ditulis dua kali (di media query dan di [data-tema]),
+     cepat atau lambat keduanya akan berbeda tanpa disadari. */
+  --g-kertas: #15161a;
+  --g-permukaan: #1d1f24;
+  --g-tinta: #e9eaee; /*                15,04 di kertas (AAA) */
+  --g-tinta-lemah: #a3aab6; /*                 7,73 di kertas (AAA)
+                                             7,05 di permukaan (AAA) */
+  --g-garis: #2b2e36;
+  --g-utama: #a77f60; /* cokelat muda lebih terbaca di latar gelap */
+  --g-utama-teks: #15161a; /*                 5,03 di utama   (AA) */
+  --g-aksen: #ccd67f;
+  --g-aksen-teks: #15161a; /*                11,62 di aksen   (AAA) */
+  --g-bahaya: #f0a595; /*                 9,06 di kertas (AAA) */
+  --g-bahaya-lemah: #3a1a14;
+
+  /* Versi terang dari tiap warna agent. BUKAN kemewahan: nilai mode terang
+     di atas nyaris lenyap di kartu gelap -- #3A4048 cuma 1,58 terhadap
+     permukaan #1D1F24, jadi kotaknya tidak kelihatan sama sekali.
+     Di sini kotaknya terang dan teksnya gelap; semua >= 4,5 untuk teks dan
+     >= 3 terhadap permukaan (paling tipis: portal 7,53 / 6,87). */
+  --g-agent-teks: #15161a;
+  --g-agent-portal: #c3a184;
+  --g-agent-hr: #e59a9a;
+  --g-agent-supertools: #8fb6ee;
+  --g-agent-admin: #a6adb9;
+  --g-agent-maps: #d2b472;
+  --g-agent-marketing: #79c9a0;
+  --g-agent-cmod: #9aa7ea;
+  --g-agent-report: #c2a4e4;
+
+  /* Di latar gelap bayangan bernuansa nyaris tak terlihat, jadi pakai hitam. */
+  --g-bayang-kecil: 0 1px 2px rgb(0 0 0 / 0.3);
+  --g-bayang: 0 2px 4px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.36);
+  --g-bayang-besar: 0 4px 8px rgb(0 0 0 / 0.32), 0 16px 40px rgb(0 0 0 / 0.45);
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
+/* Pemicu 1: setelan sistem gelap, DAN user tidak memaksa terang. */
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  :root:not([data-tema="terang"]) {
+    color-scheme: dark;
+    --kertas: var(--g-kertas);
+    --permukaan: var(--g-permukaan);
+    --tinta: var(--g-tinta);
+    --tinta-lemah: var(--g-tinta-lemah);
+    --garis: var(--g-garis);
+    --utama: var(--g-utama);
+    --utama-teks: var(--g-utama-teks);
+    --aksen: var(--g-aksen);
+    --aksen-teks: var(--g-aksen-teks);
+    --bahaya: var(--g-bahaya);
+    --bahaya-lemah: var(--g-bahaya-lemah);
+    --bayang-kecil: var(--g-bayang-kecil);
+    --bayang: var(--g-bayang);
+    --bayang-besar: var(--g-bayang-besar);
+    --agent-teks: var(--g-agent-teks);
+    --agent-portal: var(--g-agent-portal);
+    --agent-hr: var(--g-agent-hr);
+    --agent-supertools: var(--g-agent-supertools);
+    --agent-admin: var(--g-agent-admin);
+    --agent-maps: var(--g-agent-maps);
+    --agent-marketing: var(--g-agent-marketing);
+    --agent-cmod: var(--g-agent-cmod);
+    --agent-report: var(--g-agent-report);
   }
 }
 
+/* Pemicu 2: user memilih gelap sendiri, apa pun setelan sistemnya. */
+:root[data-tema="gelap"] {
+  color-scheme: dark;
+  --kertas: var(--g-kertas);
+  --permukaan: var(--g-permukaan);
+  --tinta: var(--g-tinta);
+  --tinta-lemah: var(--g-tinta-lemah);
+  --garis: var(--g-garis);
+  --utama: var(--g-utama);
+  --utama-teks: var(--g-utama-teks);
+  --aksen: var(--g-aksen);
+  --aksen-teks: var(--g-aksen-teks);
+  --bahaya: var(--g-bahaya);
+  --bahaya-lemah: var(--g-bahaya-lemah);
+  --bayang-kecil: var(--g-bayang-kecil);
+  --bayang: var(--g-bayang);
+  --bayang-besar: var(--g-bayang-besar);
+  --agent-teks: var(--g-agent-teks);
+  --agent-portal: var(--g-agent-portal);
+  --agent-hr: var(--g-agent-hr);
+  --agent-supertools: var(--g-agent-supertools);
+  --agent-admin: var(--g-agent-admin);
+  --agent-maps: var(--g-agent-maps);
+  --agent-marketing: var(--g-agent-marketing);
+  --agent-cmod: var(--g-agent-cmod);
+  --agent-report: var(--g-agent-report);
+}
+
+/* Dipetakan jadi kelas Tailwind: bg-kertas, text-tinta, border-garis, dst.
+   Karena nilainya dari variabel CSS, satu kelas otomatis ikut mode
+   terang/gelap -- tidak perlu menulis `dark:` di tiap komponen. */
+@theme inline {
+  --color-kertas: var(--kertas);
+  --color-permukaan: var(--permukaan);
+  --color-tinta: var(--tinta);
+  --color-tinta-lemah: var(--tinta-lemah);
+  --color-garis: var(--garis);
+  --color-utama: var(--utama);
+  --color-utama-teks: var(--utama-teks);
+  --color-aksen: var(--aksen);
+  --color-aksen-teks: var(--aksen-teks);
+  --color-bahaya: var(--bahaya);
+  --color-bahaya-lemah: var(--bahaya-lemah);
+
+  --shadow-kecil: var(--bayang-kecil);
+  --shadow-sedang: var(--bayang);
+  --shadow-besar: var(--bayang-besar);
+
+  /* Plus Jakarta Sans dipasang di `app/layout.tsx` lewat next/font. */
+  --font-sans: var(--font-jakarta), system-ui, sans-serif;
+  --font-mono: Consolas, "Courier New", monospace;
+}
+
+/* Scrollbar disamarkan supaya tidak mencuri perhatian dari isi. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--utama) 30%, transparent) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--utama) 26%, transparent);
+  border-radius: 9999px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in srgb, var(--utama) 42%, transparent);
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--kertas);
+  color: var(--tinta);
+  /* ⚠️ Harus ikut `--font-sans`, bukan menyebut huruf sendiri. Baris ini
+     sempat menulis Arial langsung dan MENIMPA huruf yang dipasang
+     `next/font` di layout — fontnya termuat, tapi tidak pernah terpakai,
+     dan itu tidak kelihatan dari mana pun kecuali dari layar. */
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Jawaban agent muncul dengan lembut, tidak menyentak. */
+@keyframes muncul {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.muncul {
+  animation: muncul 0.25s ease-out;
+}
+
+/* ---------------------------------------------------------------
+   Gaya isi jawaban agent (hasil render markdown).
+   Ditulis manual, bukan pakai @tailwindcss/typography, supaya tidak
+   menambah dependency cuma untuk beberapa elemen.
+   --------------------------------------------------------------- */
+.prose-chat > :first-child {
+  margin-top: 0;
+}
+.prose-chat > :last-child {
+  margin-bottom: 0;
+}
+
+.prose-chat p,
+.prose-chat ul,
+.prose-chat ol {
+  margin: 0.5rem 0;
+}
+
+.prose-chat ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+}
+.prose-chat ol {
+  list-style: decimal;
+  padding-left: 1.25rem;
+}
+.prose-chat li {
+  margin: 0.125rem 0;
+}
+
+.prose-chat h1,
+.prose-chat h2,
+.prose-chat h3 {
+  margin: 0.75rem 0 0.375rem;
+  font-weight: 600;
+}
+.prose-chat h1 {
+  font-size: 1.05rem;
+}
+.prose-chat h2 {
+  font-size: 1rem;
+}
+.prose-chat h3 {
+  font-size: 0.95rem;
+}
+
+.prose-chat strong {
+  font-weight: 600;
+}
+
+/* Tabel hasil query -- bisa lebih lebar dari bubble, jadi boleh discroll. */
+.prose-chat table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 0.5rem 0;
+  font-size: 0.8125rem;
+}
+.prose-chat th,
+.prose-chat td {
+  border: 1px solid var(--garis);
+  padding: 0.25rem 0.5rem;
+  text-align: left;
+  white-space: nowrap;
+}
+.prose-chat th {
+  background: color-mix(in srgb, var(--utama) 14%, transparent);
+  font-weight: 600;
+}
+
+.prose-chat code {
+  background: color-mix(in srgb, var(--utama) 14%, transparent);
+  border-radius: 0.25rem;
+  padding: 0.0625rem 0.25rem;
+  /* Ikut token, bukan menyebut huruf sendiri — sama alasannya dengan `body`. */
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+}
+.prose-chat pre {
+  background: color-mix(in srgb, var(--utama) 14%, transparent);
+  border-radius: 0.5rem;
+  padding: 0.625rem;
+  overflow-x: auto;
+  margin: 0.5rem 0;
+}
+.prose-chat pre code {
+  background: none;
+  padding: 0;
+}
+
+/* ============================================================
+   Tautan sumber di dalam jawaban
+   ============================================================
+   Ditambahkan 2 Okt 2026. Sebelumnya `.prose-chat` tidak punya aturan untuk
+   <a> sama sekali, jadi tautan panduan tampil seperti teks biasa -- user
+   tidak tahu itu bisa diklik.
+
+   Alamat panduan berbentuk host + uuid 36 huruf. Teksnya sudah diringkas di
+   komponen (lihat `ringkasUrl`), tapi `overflow-wrap` tetap dipasang supaya
+   alamat yang tidak terduga panjangnya tidak menjebol lebar bubble. */
+.prose-chat a {
+  /* Memakai token tema yang sudah ada, bukan warna sendiri -- `--utama` itu
+     cokelat merek yang dipakai tombol dan gelembung user, dan sudah punya
+     padanan mode gelap (`--g-utama`, lebih terang supaya tetap terbaca).
+     Warna baru di sini akan jadi satu-satunya yang tidak ikut tema. */
+  color: var(--utama);
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 2px;
+  text-decoration-color: color-mix(in srgb, currentColor 45%, transparent);
+  overflow-wrap: anywhere;
+  transition: text-decoration-color 0.15s ease;
+}
+
+.prose-chat a:hover {
+  text-decoration-color: currentColor;
+}
+
+.prose-chat a:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Penanda "membuka tab baru". Dipasang lewat ::after, bukan gambar, supaya
+   ikut warna teks di tema terang maupun gelap. */
+.prose-chat a[target="_blank"]::after {
+  content: "↗";
+  display: inline-block;
+  margin-left: 0.15em;
+  font-size: 0.85em;
+  opacity: 0.7;
+}
+
+/* Tautan sumber yang teksnya alamat (sudah diringkas) ditampilkan monospace:
+   alamat lebih mudah dibaca dan dibandingkan dengan begitu. */
+.prose-chat a.tautan-sumber {
+  font-family: var(--font-mono, ui-monospace, "Cascadia Mono", Consolas, monospace);
+  font-size: 0.92em;
 }

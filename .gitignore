@@ -39,3 +39,34 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# jangan ignore template kredensial (isinya kosong)
+!.env.example
+
+# indeks vektor hasil generate (bisa dibuat ulang: npm run index:teks)
+/data/indeks-*.json
+# Cadangan apps_config & peran akun SUNGGUHAN sebelum skrip uji mengubahnya.
+# Isinya email, UUID akun, dan pemberian akses milik orang -- sekaligus
+# satu-satunya jalan pulang skrip itu, jadi berkasnya memang harus ada di
+# laptop, tapi tidak boleh ikut ke mana pun.
+#
+# ⚠️ Pola lama cuma `akses-uji-cadangan-*.json` (pakai tanda hubung), jadi
+# berkas `akses-uji-cadangan.json` TANPA akhiran lolos. Ditemukan 14 Okt 2026
+# saat menyiapkan repo untuk GitHub, sebelum commit pertama yang sungguhan.
+/data/akses-uji-cadangan*.json
+/data/peran-uji-cadangan*.json
+/data/knowledge-files/
+
+# Laporan penjualan asli perusahaan (652 KB). Dipakai menguji jalur unggah
+# dokumen; isinya data penjualan sungguhan, bukan contoh.
+/data/*.pdf
+
+# Sesi login WhatsApp -- JANGAN di-commit, isinya kredensial perangkat
+wa-bot/auth/
+
+# Catatan kerja + dump skema dari eksplorasi database. 944 KB, dan di dalamnya
+# kata "PASSWORD" muncul 38 kali (nama user database, GRANT, baris IDENTIFIED BY).
+# Isinya memang perlu untuk bekerja, tapi tidak ada satu pun yang pantas masuk
+# riwayat commit -- riwayat git tidak bisa dibersihkan belakangan tanpa menulis
+# ulang seluruh commit.
+claude_context/

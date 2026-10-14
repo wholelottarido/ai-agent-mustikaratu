@@ -6,6 +6,9 @@
     "skipLibCheck": true,
     "strict": true,
     "noEmit": true,
+    // Script di scripts/ meng-import dengan ekstensi eksplisit (./x.ts) karena
+    // Node 24 mewajibkannya di ESM. Aman dipakai bersama noEmit.
+    "allowImportingTsExtensions": true,
     "esModuleInterop": true,
     "module": "esnext",
     "moduleResolution": "bundler",

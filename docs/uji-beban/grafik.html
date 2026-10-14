@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Uji Beban Model Server</title>
+<style>
+  /* Palet mengikuti portal. Warna batang diambil dari keluarga yang sama
+     tapi chroma-nya dinaikkan -- cokelat asli portal (#8a5f41) gagal ambang
+     chroma sebagai isian grafik: terbaca keabu-abuan di atas latar krem. */
+  :root {
+    --kertas: #fbf6ec;
+    --permukaan: #f3e4c9;
+    --tinta: #3a281b;
+    --tinta-lemah: #6e4c34;
+    --garis: #e0cda9;
+    --batang: #a35424;
+    --gagal: #b9a58a;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-tema="terang"]) {
+      --kertas: #1e150e;
+      --permukaan: #271b12;
+      --tinta: #f3e4c9;
+      --tinta-lemah: #be9873;
+      --garis: #3a2b1e;
+      --batang: #c47539;
+      --gagal: #6b5946;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 32px 16px 56px;
+    background: var(--kertas);
+    color: var(--tinta);
+    font: 15px/1.55 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 860px; margin: 0 auto; }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; letter-spacing: -0.01em; }
+  .sub { color: var(--tinta-lemah); font-size: 0.875rem; margin: 0 0 28px; }
+
+  .hero {
+    background: var(--permukaan);
+    border: 1px solid var(--garis);
+    border-radius: 18px;
+    padding: 22px 24px;
+    margin-bottom: 30px;
+  }
+  .hero .angka { font-size: 3.2rem; font-weight: 650; line-height: 1; letter-spacing: -0.03em; }
+  .hero .label { color: var(--tinta-lemah); font-size: 0.875rem; margin-top: 6px; }
+
+  section { margin-bottom: 34px; }
+  h2 { font-size: 1rem; margin: 0 0 2px; }
+  .ket { color: var(--tinta-lemah); font-size: 0.8125rem; margin: 0 0 12px; }
+
+  svg { width: 100%; height: auto; display: block; overflow: visible; }
+  .grid line { stroke: var(--garis); stroke-width: 1; }
+  .axis { fill: var(--tinta-lemah); font-size: 11px; }
+  .nilai { fill: var(--tinta); font-size: 11px; font-weight: 600; }
+  .nilai-lemah { fill: var(--tinta-lemah); font-size: 10.5px; }
+  .bar { fill: var(--batang); }
+  .bar-kosong { fill: var(--gagal); }
+  .hit { fill: transparent; cursor: default; }
+  .hit:hover + .tip, .hit:focus-visible + .tip { opacity: 1; }
+
+  .tip {
+    opacity: 0;
+    transition: opacity .12s;
+    pointer-events: none;
+  }
+  .tip rect { fill: var(--tinta); rx: 6; }
+  .tip text { fill: var(--kertas); font-size: 11px; }
+
+  table { border-collapse: collapse; width: 100%; font-size: 0.8125rem; }
+  caption { text-align: left; color: var(--tinta-lemah); font-size: 0.8125rem; padding-bottom: 8px; }
+  th, td { text-align: right; padding: 7px 10px; border-bottom: 1px solid var(--garis); }
+  th:first-child, td:first-child { text-align: left; }
+  thead th { color: var(--tinta-lemah); font-weight: 600; }
+  tbody tr:last-child td { border-bottom: 0; }
+  .gagal-teks { color: var(--tinta-lemah); }
+
+  footer { color: var(--tinta-lemah); font-size: 0.8125rem; border-top: 1px solid var(--garis); padding-top: 16px; }
+  footer p { margin: 0 0 8px; }
+  code { font-family: ui-monospace, "Cascadia Code", Consolas, monospace; font-size: 0.9em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Uji Beban Model Server</h1>
+  <p class="sub">
+    Gemma 12B lewat Bifrost &middot; pertanyaan &ldquo;berapa omzet bulan agustus?&rdquo;
+    &middot; diukur lewat agent asli, 28 September 2026
+  </p>
+
+  <div class="hero">
+    <div class="angka">1</div>
+    <div class="label">
+      pengguna serentak yang bisa dilayani. Di angka 2 ke atas, hampir semua
+      permintaan ditolak server dengan pesan <code>Context size has been exceeded</code>.
+    </div>
+  </div>
+
+  <section>
+    <h2>Tingkat keberhasilan</h2>
+    <p class="ket">Berapa persen permintaan yang mendapat jawaban.</p>
+    <svg id="g1" viewBox="0 0 720 260" role="img" aria-label="Grafik batang tingkat keberhasilan per jumlah pengguna serentak"></svg>
+  </section>
+
+  <section>
+    <h2>Lama server menyelesaikan seluruh rombongan</h2>
+    <p class="ket">
+      Dari permintaan pertama dilepas sampai yang terakhir selesai &mdash; termasuk
+      yang berakhir gagal. Waktunya tetap naik walau jawabannya tidak keluar.
+    </p>
+    <svg id="g2" viewBox="0 0 720 260" role="img" aria-label="Grafik batang total waktu per jumlah pengguna serentak"></svg>
+  </section>
+
+  <section>
+    <table>
+      <caption>Angka lengkap</caption>
+      <thead>
+        <tr>
+          <th>Pengguna serentak</th>
+          <th>Berhasil</th>
+          <th>Tingkat</th>
+          <th>Waktu jawab</th>
+          <th>Total</th>
+        </tr>
+      </thead>
+      <tbody id="tabel"></tbody>
+    </table>
+  </section>
+
+  <footer>
+    <p>
+      <strong>Pesan galatnya konsisten:</strong> <code>Context size has been exceeded</code>.
+      Server llama.cpp membagi jatah konteks ke beberapa slot paralel. Satu
+      percakapan di portal ini memakan sekitar 9&ndash;10 ribu token, jadi dua
+      permintaan serentak sudah melewati jatahnya.
+    </p>
+    <p>
+      <strong>Bukan batas modelnya, tapi setelan servernya.</strong> Menaikkan
+      <code>--ctx-size</code> dan <code>--parallel</code> di server akan menaikkan
+      angka ini. Memperpendek instruksi di sisi aplikasi juga membantu.
+    </p>
+    <p>
+      Data mentah: <code>docs/uji-beban/hasil.json</code> &middot;
+      ulangi dengan <code>npm run uji:beban</code>
+    </p>
+  </footer>
+</main>
+
+<script>
+const DATA = [
+  { n: 1,  berhasil: 1,  total: 12.4, jawab: 12.4 },
+  { n: 2,  berhasil: 0,  total: 3.1,  jawab: null },
+  { n: 3,  berhasil: 0,  total: 5.5,  jawab: null },
+  { n: 5,  berhasil: 0,  total: 11.1, jawab: null },
+  { n: 8,  berhasil: 0,  total: 16.8, jawab: null },
+  { n: 10, berhasil: 1,  total: 23.4, jawab: 23.4 },
+  { n: 20, berhasil: 0,  total: 36.4, jawab: null },
+  { n: 30, berhasil: 0,  total: 55.8, jawab: null },
+];
+
+const NS = "http://www.w3.org/2000/svg";
+const el = (t, a = {}) => {
+  const e = document.createElementNS(NS, t);
+  for (const [k, v] of Object.entries(a)) e.setAttribute(k, v);
+  return e;
+};
+
+/**
+ * Satu grafik batang, satu seri.
+ *
+ * Batang bernilai nol tetap digambar setinggi 3px dengan warna teredam --
+ * batang yang hilang sama sekali terbaca sebagai "tidak diukur", padahal
+ * diukur dan hasilnya nol.
+ */
+function gambar(svgId, nilai, format, satuanY) {
+  const svg = document.getElementById(svgId);
+  const W = 720, H = 260, kiri = 46, kanan = 12, atas = 22, bawah = 42;
+  const lebarPlot = W - kiri - kanan, tinggiPlot = H - atas - bawah;
+  const maks = Math.max(...nilai) * 1.15 || 1;
+
+  // Garis bantu horizontal, recessive.
+  const g = el("g", { class: "grid" });
+  for (let i = 0; i <= 4; i++) {
+    const y = atas + (tinggiPlot / 4) * i;
+    g.appendChild(el("line", { x1: kiri, x2: W - kanan, y1: y, y2: y }));
+    const t = el("text", { x: kiri - 8, y: y + 4, class: "axis", "text-anchor": "end" });
+    t.textContent = format(maks - (maks / 4) * i, true);
+    g.appendChild(t);
+  }
+  svg.appendChild(g);
+
+  const langkah = lebarPlot / DATA.length;
+  const lebarBatang = Math.min(46, langkah - 12); // celah >= 2px antar batang
+
+  DATA.forEach((d, i) => {
+    const v = nilai[i];
+    const x = kiri + langkah * i + (langkah - lebarBatang) / 2;
+    const tinggi = Math.max(3, (v / maks) * tinggiPlot);
+    const y = atas + tinggiPlot - tinggi;
+
+    svg.appendChild(el("rect", {
+      x, y, width: lebarBatang, height: tinggi, rx: 4,
+      class: v > 0 ? "bar" : "bar-kosong",
+    }));
+
+    // Label langsung di tiap batang -- jumlah datanya sedikit, jadi tidak
+    // menumpuk, dan pembaca tidak perlu menaksir dari garis bantu.
+    const lbl = el("text", {
+      x: x + lebarBatang / 2, y: y - 7,
+      class: v > 0 ? "nilai" : "nilai-lemah", "text-anchor": "middle",
+    });
+    lbl.textContent = format(v, false);
+    svg.appendChild(lbl);
+
+    const sumbu = el("text", {
+      x: x + lebarBatang / 2, y: H - bawah + 18, class: "axis", "text-anchor": "middle",
+    });
+    sumbu.textContent = d.n;
+    svg.appendChild(sumbu);
+
+    // Sasaran hover lebih besar daripada batangnya.
+    svg.appendChild(el("rect", { x: kiri + langkah * i, y: atas, width: langkah, height: tinggiPlot, class: "hit" }));
+
+    const tip = el("g", { class: "tip" });
+    const teks = `${d.n} pengguna · ${d.berhasil}/${d.n} berhasil · total ${d.total.toFixed(1)} dtk`;
+    const w = teks.length * 5.6 + 16;
+    const tx = Math.min(Math.max(x + lebarBatang / 2 - w / 2, kiri), W - kanan - w);
+    tip.appendChild(el("rect", { x: tx, y: Math.max(2, y - 34), width: w, height: 24 }));
+    const tt = el("text", { x: tx + 8, y: Math.max(2, y - 34) + 16 });
+    tt.textContent = teks;
+    tip.appendChild(tt);
+    svg.appendChild(tip);
+  });
+
+  const judulY = el("text", { x: kiri - 8, y: atas - 8, class: "axis", "text-anchor": "end" });
+  judulY.textContent = satuanY;
+  svg.appendChild(judulY);
+
+  const judulX = el("text", { x: W - kanan, y: H - 6, class: "axis", "text-anchor": "end" });
+  judulX.textContent = "jumlah pengguna serentak";
+  svg.appendChild(judulX);
+}
+
+gambar("g1", DATA.map((d) => (d.berhasil / d.n) * 100), (v) => Math.round(v) + "%", "%");
+gambar("g2", DATA.map((d) => d.total), (v, sumbu) => (sumbu ? Math.round(v) : v.toFixed(1)), "detik");
+
+document.getElementById("tabel").innerHTML = DATA.map((d) => `
+  <tr>
+    <td>${d.n}</td>
+    <td>${d.berhasil}</td>
+    <td>${Math.round((d.berhasil / d.n) * 100)}%</td>
+    <td>${d.jawab === null ? '<span class="gagal-teks">tidak ada jawaban</span>' : d.jawab.toFixed(1) + " dtk"}</td>
+    <td>${d.total.toFixed(1)} dtk</td>
+  </tr>`).join("");
+</script>
+</body>
+</html>

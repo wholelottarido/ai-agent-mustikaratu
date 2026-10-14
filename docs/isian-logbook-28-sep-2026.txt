@@ -1,0 +1,15 @@
+ISIAN FORM LOGBOOK — Senin, 28 September 2026
+
+[1] URAIAN AKTIVITAS
+
+Menambahkan kemampuan mencatat data ke portal asisten AI: penjualan, lembur, dan pelamar kerja. Termasuk pembatalan data salah catat dan persetujuan lembur, dengan izin dibagi per jabatan. Diuji otomatis lewat 237 pemeriksaan, seluruhnya lolos.
+
+
+[2] PEMBELAJARAN YANG DIPEROLEH
+
+AI sering menebak hal yang tidak diketahuinya lalu menyampaikannya dengan meyakinkan, misalnya mengaku data sudah tersimpan padahal belum. Aturan bisnis juga sebaiknya dibaca dari data yang ada, bukan dikarang.
+
+
+[3] KENDALA YANG DIALAMI
+
+Tombol baru sempat tidak muncul, ternyata karena halaman peramban belum dimuat ulang, bukan karena kodenya. Data uji juga sempat tertinggal di database dan ikut terhitung omzet. Memori laptop 8 GB beberapa kali tidak cukup.

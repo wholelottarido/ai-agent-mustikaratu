@@ -1,0 +1,70 @@
+{
+  "model": "llama.cpp/gemma-4-12b-it-q8",
+  "pertanyaan": "berapa omzet bulan agustus?",
+  "waktu": "2026-09-28T02:36:29.497Z",
+  "tingkat": [
+    {
+      "pengguna": 1,
+      "totalDetik": 12.419,
+      "min": 12.419,
+      "median": 12.419,
+      "p95": 12.419,
+      "maks": 12.419,
+      "berhasil": 1,
+      "benar": 1,
+      "galat": []
+    },
+    {
+      "pengguna": 2,
+      "totalDetik": 3.058,
+      "min": 0,
+      "median": 0,
+      "p95": 0,
+      "maks": 0,
+      "berhasil": 0,
+      "benar": 0,
+      "galat": [
+        "Context size has been exceeded."
+      ]
+    },
+    {
+      "pengguna": 3,
+      "totalDetik": 5.461,
+      "min": 0,
+      "median": 0,
+      "p95": 0,
+      "maks": 0,
+      "berhasil": 0,
+      "benar": 0,
+      "galat": [
+        "Context size has been exceeded."
+      ]
+    },
+    {
+      "pengguna": 5,
+      "totalDetik": 11.107,
+      "min": 0,
+      "median": 0,
+      "p95": 0,
+      "maks": 0,
+      "berhasil": 0,
+      "benar": 0,
+      "galat": [
+        "Context size has been exceeded."
+      ]
+    },
+    {
+      "pengguna": 8,
+      "totalDetik": 16.808,
+      "min": 0,
+      "median": 0,
+      "p95": 0,
+      "maks": 0,
+      "berhasil": 0,
+      "benar": 0,
+      "galat": [
+        "Context size has been exceeded."
+      ]
+    }
+  ]
+}
