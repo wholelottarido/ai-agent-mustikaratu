@@ -19,6 +19,8 @@ export type DrafUmum = {
      * supaya riwayat percakapan lama tetap bisa dibuka.
      */
     keterangan?: Keterangan[];
+    /** Kolom yang nilainya baru dibuat saat menyimpan (mis. nomor tiket). */
+    dibangkitkan?: { kolom: string; label: string }[];
     perubahan: Perubahan[];
   };
   sidik: string;
@@ -40,6 +42,8 @@ export type DrafUmum = {
 export function KonfirmasiUmum({ data }: { data: DrafUmum }) {
   const [status, setStatus] = useState<"siap" | "menyimpan" | "tersimpan" | "gagal" | "batal">("siap");
   const [pesan, setPesan] = useState("");
+  // Satu pertanyaan, dipakai di empat tempat: ini baris BARU atau baris lama?
+  const baru = data.draf.operasi === "tambah";
 
   async function simpan() {
     if (status !== "siap") return;
@@ -67,7 +71,7 @@ export function KonfirmasiUmum({ data }: { data: DrafUmum }) {
   if (status === "tersimpan") {
     return (
       <div className="mt-3 rounded-2xl bg-aksen/25 p-4 text-sm ring-1 ring-aksen/50">
-        <p className="font-medium">✓ {data.draf.judulBaris} diperbarui</p>
+        <p className="font-medium">✓ {data.draf.judulBaris} {baru ? "disimpan" : "diperbarui"}</p>
         <ul className="mt-1 text-tinta-lemah">
           {data.draf.perubahan.map((p) => (
             <li key={p.kolom}>
@@ -91,7 +95,7 @@ export function KonfirmasiUmum({ data }: { data: DrafUmum }) {
     <div className="mt-3 overflow-hidden rounded-2xl bg-permukaan/60 shadow-kecil ring-1 ring-garis/60">
       <div className="border-b border-garis/50 px-4 py-2.5">
         <p className="text-xs font-semibold uppercase tracking-wide text-tinta-lemah">
-          Belum tersimpan &mdash; periksa perubahannya
+          {baru ? "Belum tersimpan — periksa isiannya" : "Belum tersimpan — periksa perubahannya"}
         </p>
         <p className="mt-0.5 text-xs text-tinta-lemah">
           <span className="font-mono text-tinta">{data.draf.judulBaris}</span> &middot;{" "}
@@ -116,13 +120,29 @@ export function KonfirmasiUmum({ data }: { data: DrafUmum }) {
       )}
 
       <div className="space-y-3 px-4 py-3 text-sm">
+        {/* ⚠️ `tambah` TIDAK menampilkan nilai lama yang dicoret. Belum ada baris
+            lama, jadi coretan di atas "(kosong)" cuma mengaku sesuatu diganti
+            padahal tidak ada yang diganti. Untuk `ubah`, coretan itu justru
+            inti kartunya. */}
         {data.draf.perubahan.map((p) => (
           <div key={p.kolom}>
             <p className="text-xs font-medium text-tinta-lemah">{p.label}</p>
-            <p className="mt-0.5 whitespace-pre-wrap text-tinta-lemah line-through decoration-garis">
-              {p.dari || "(kosong)"}
-            </p>
+            {!baru && (
+              <p className="mt-0.5 whitespace-pre-wrap text-tinta-lemah line-through decoration-garis">
+                {p.dari || "(kosong)"}
+              </p>
+            )}
             <p className="mt-0.5 whitespace-pre-wrap font-medium">{p.jadi}</p>
+          </div>
+        ))}
+
+        {/* Kolom yang nilainya baru lahir saat disimpan. Disebutkan supaya
+            tidak terlihat seperti ada yang terlewat diisi — dan supaya tidak
+            ada yang menunggu nomornya muncul di kartu. */}
+        {(data.draf.dibangkitkan ?? []).map((b) => (
+          <div key={b.kolom}>
+            <p className="text-xs font-medium text-tinta-lemah">{b.label}</p>
+            <p className="mt-0.5 italic text-tinta-lemah">dibuat otomatis saat disimpan</p>
           </div>
         ))}
       </div>

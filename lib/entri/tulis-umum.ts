@@ -27,6 +27,8 @@
 import { createHash } from "node:crypto";
 import { poolPerusahaan } from "../db-perusahaan";
 import { poolTulis } from "./simpan-tiket";
+import { periksaPembangkit } from "./pembangkit";
+import { cocokkan, periksaPilihan, pilihanRelasi, type IsianPilihan } from "./pilihan";
 
 /**
  * Tabel yang boleh ditulis, dan kolom mana yang menyatakan pemiliknya.
@@ -95,9 +97,17 @@ export type Isian = {
   wajib?: boolean;
   maks?: number;
   bawaan?: unknown;
-  pilihan?: { jenis: string; opsi?: { nilai: string; label: string }[] };
+  pilihan?: IsianPilihan;
 };
-export type Otomatis = { kolom: string; label?: string; nilai?: unknown; sumber?: string };
+export type Otomatis = {
+  kolom: string;
+  label?: string;
+  nilai?: unknown;
+  /** `karyawan` = dari sesi · `bangkit` = dihitung saat menyimpan. */
+  sumber?: string;
+  /** Nama pembangkit di `pembangkit.ts`, kalau `sumber` = "bangkit". */
+  pembangkit?: string;
+};
 export type Kunci = { kolom: string; label?: string };
 export type Syarat = { kolom: string; boleh: string[] };
 
@@ -132,6 +142,16 @@ export type Draf = {
    * alasan.
    */
   keterangan: Keterangan[];
+  /**
+   * Kolom yang nilainya baru dihitung SAAT MENYIMPAN (mis. nomor tiket).
+   *
+   * ⚠️ TIDAK IKUT SIDIK, karena memang belum punya nilai. Menghitungnya saat
+   * rancangan disusun akan membuat dua orang yang membuka kartu bersamaan
+   * melihat nomor yang sama, dan yang kedua gagal menyimpan.
+   *
+   * Kosong untuk `ubah`/`hapus`.
+   */
+  dibangkitkan: { kolom: string; label: string }[];
   perubahan: Perubahan[];
 };
 
@@ -201,14 +221,55 @@ export function bacaKonfigTulis(t: {
   if (t.operasi !== "tambah" && kunci.length === 0) {
     return { ok: false, sebab: `operasi "${t.operasi}" tanpa kolom_kunci — akan menyentuh seluruh tabel` };
   }
+
+  const isian = (Array.isArray(t.isian) ? t.isian : []) as Isian[];
+  const otomatis = (Array.isArray(t.otomatis) ? t.otomatis : []) as Otomatis[];
+
+  if (t.operasi === "tambah") {
+    // ⚠️ DIPERIKSA DI SINI, SEBELUM TOOL-NYA DIRAKIT.
+    //
+    // Yang ditolak di sini sampai ke administrator sebagai alasan di layar
+    // Kelola AI. Yang lolos ke perakit lalu gagal saat dipakai cuma sampai ke
+    // PEMAKAI, sebagai galat yang tidak menunjuk sebabnya — dan administrator
+    // tidak pernah tahu setelannya yang salah.
+    if (isian.length === 0) {
+      return { ok: false, sebab: `operasi "tambah" tanpa kolom_isian — tidak ada yang bisa diisi` };
+    }
+    const namaIsian = new Set(isian.map((i) => i.kolom));
+    for (const i of isian) {
+      if (!i.pilihan) continue;
+      const p = periksaPilihan(i.pilihan, i.kolom);
+      if (!p.ok) return { ok: false, sebab: p.sebab };
+      // Induk harus benar-benar ada DAN disebut lebih dulu. Urutan setelan
+      // itulah urutan pengisiannya; induk yang disebut belakangan tidak akan
+      // pernah terisi waktu anaknya butuh.
+      const induk = i.pilihan.induk;
+      if (induk) {
+        if (!namaIsian.has(induk.isian)) {
+          return { ok: false, sebab: `"${i.kolom}" merujuk induk "${induk.isian}" yang bukan isian mana pun` };
+        }
+        const urutInduk = isian.findIndex((x) => x.kolom === induk.isian);
+        const urutAnak = isian.findIndex((x) => x.kolom === i.kolom);
+        if (urutInduk > urutAnak) {
+          return { ok: false, sebab: `induk "${induk.isian}" disebut SESUDAH "${i.kolom}" — urutannya harus induk dulu` };
+        }
+      }
+    }
+    for (const o of otomatis) {
+      if (o.sumber !== "bangkit") continue;
+      const p = periksaPembangkit(o.pembangkit, t.tabelTarget);
+      if (!p.ok) return { ok: false, sebab: p.sebab };
+    }
+  }
+
   return {
     ok: true,
     konfig: {
       kode: t.kode,
       operasi: t.operasi as KonfigTulis["operasi"],
       tabel: t.tabelTarget,
-      isian: (Array.isArray(t.isian) ? t.isian : []) as Isian[],
-      otomatis: (Array.isArray(t.otomatis) ? t.otomatis : []) as Otomatis[],
+      isian,
+      otomatis,
       kunci,
       syarat: (Array.isArray(t.syarat) ? t.syarat : []) as Syarat[],
     },
@@ -220,11 +281,173 @@ function rapat(s: string): string {
 }
 
 /**
- * Susun rancangan untuk operasi ubah/hapus.
+ * Susun rancangan untuk operasi `tambah`.
  *
- * `tambah` belum lewat sini — ia punya penjalan sendiri yang sudah teruji di
- * `tiket.ts`, dan menggabungkannya sekarang berarti mengganti jalur yang
- * berjalan dengan jalur yang baru ditulis.
+ * ============================================================
+ * ⚠️ TIGA HAL YANG BEDA DARI `ubah`/`hapus`
+ * ============================================================
+ * 1. TIDAK ADA BARIS LAMA. Jadi tidak ada `dari`, tidak ada `keterangan`
+ *    (yang isinya dibaca dari baris yang disentuh), dan tidak ada pemeriksaan
+ *    syarat status — tidak ada status yang bisa diperiksa.
+ *
+ * 2. KOLOM PEMILIK DIISI DARI SESI, bukan disaring dengannya. Pada `ubah` ia
+ *    jadi `WHERE id_employee = $n`; di sini ia jadi nilai yang DITULIS. Arah
+ *    berbeda, tujuan sama: baris yang lahir selalu milik penanya, dan tidak
+ *    ada setelan yang bisa mengubahnya.
+ *
+ * 3. NILAI YANG DIBANGKITKAN BELUM ADA SAAT RANCANGAN DISUSUN. Nomor tiket
+ *    baru dihitung saat menyimpan — kalau dihitung sekarang, dua orang yang
+ *    membuka rancangan bersamaan akan melihat nomor yang sama dan yang kedua
+ *    gagal. Jadi kolomnya disebut di kartu sebagai "dibuat saat disimpan",
+ *    tidak ikut sidik, dan diisi `jalankanUmum`.
+ */
+async function susunDrafTambah(
+  k: KonfigTulis,
+  idEmployee: string,
+  masukan: Record<string, string | undefined>,
+): Promise<Hasil> {
+  const kolomPemilik = TABEL_BOLEH[k.tabel];
+  const boleh = await kolomBolehTulis(k.tabel, "INSERT");
+
+  const masalah: Masalah[] = [];
+  const perubahan: Perubahan[] = [];
+  const dibangkitkan: { kolom: string; label: string }[] = [];
+  // Nilai isian yang SUDAH selesai, supaya pilihan bertingkat bisa menemukan
+  // induknya. Sub-kategori butuh kategori terpilih; tanpa ini daftarnya jadi
+  // SELURUH sub-kategori dan pasangan mustahil ikut lolos.
+  const sudah = new Map<string, string>();
+
+  const tolakKolom = (kolom: string) =>
+    masalah.push({
+      jenis: "konfigurasi",
+      sebab: `kolom "${kolom}" tidak boleh ditulis role database — hak INSERT-nya belum diberikan`,
+    });
+
+  // ---- isian ----
+  for (const i of k.isian) {
+    // ⚠️ Kolom pemilik TIDAK BOLEH jadi isian. Kalau ia bisa diisi, model
+    // bisa membuat baris atas nama orang lain — dan itu terlihat seperti
+    // laporan yang sah, bukan seperti serangan.
+    if (i.kolom === kolomPemilik) {
+      masalah.push({
+        jenis: "konfigurasi",
+        sebab: `kolom pemilik "${i.kolom}" tidak boleh jadi isian — nilainya selalu dari sesi`,
+      });
+      continue;
+    }
+    if (!boleh.has(i.kolom)) { tolakKolom(i.kolom); continue; }
+
+    const diminta = (masukan[i.kolom] ?? "").trim();
+    const bawaan = i.bawaan === undefined || i.bawaan === null ? "" : String(i.bawaan);
+    let v = diminta || bawaan;
+
+    if (!v) {
+      if (i.wajib) masalah.push({ jenis: "kurang", label: i.label });
+      continue;
+    }
+
+    const p = i.pilihan;
+    if (p) {
+      const periksa = periksaPilihan(p, i.kolom);
+      if (!periksa.ok) { masalah.push({ jenis: "konfigurasi", sebab: periksa.sebab }); continue; }
+
+      let indukNilai: string | undefined;
+      if (p.induk) {
+        indukNilai = sudah.get(p.induk.isian);
+        if (!indukNilai) {
+          // Induknya belum terisi: entah urutannya terbalik di setelan, entah
+          // isian induknya sendiri gagal. Dua-duanya berarti daftar pilihan di
+          // sini tidak bisa disusun — dan menyusunnya TANPA saringan induk
+          // justru yang berbahaya.
+          masalah.push({
+            jenis: "konfigurasi",
+            sebab: `"${i.label}" bergantung pada "${p.induk.isian}", yang belum terisi`,
+          });
+          continue;
+        }
+      }
+
+      const daftar = await pilihanRelasi(p, indukNilai);
+      if (daftar.length === 0) {
+        masalah.push({ jenis: "tidak-dikenal", label: i.label, diberi: v, pilihan: [] });
+        continue;
+      }
+      const c = cocokkan(v, daftar);
+      if (Array.isArray(c)) {
+        masalah.push({ jenis: "tidak-dikenal", label: i.label, diberi: v, pilihan: c.map((x) => x.label) });
+        continue;
+      }
+      sudah.set(i.kolom, c.nilai);
+      perubahan.push({ kolom: i.kolom, label: i.label, dari: "", jadi: c.nilai });
+      continue;
+    }
+
+    if (i.maks && v.length > i.maks) {
+      masalah.push({ jenis: "kepanjangan", label: i.label, maks: i.maks, panjang: v.length });
+      continue;
+    }
+    v = v.trim();
+    sudah.set(i.kolom, v);
+    perubahan.push({ kolom: i.kolom, label: i.label, dari: "", jadi: v });
+  }
+
+  // ---- otomatis ----
+  for (const o of k.otomatis) {
+    if (o.kolom === kolomPemilik) continue; // diisi di bawah, dari sesi
+    if (!boleh.has(o.kolom)) { tolakKolom(o.kolom); continue; }
+
+    if (o.sumber === "bangkit") {
+      const p = periksaPembangkit((o as { pembangkit?: unknown }).pembangkit, k.tabel);
+      if (!p.ok) { masalah.push({ jenis: "konfigurasi", sebab: p.sebab }); continue; }
+      dibangkitkan.push({ kolom: o.kolom, label: o.label ?? o.kolom });
+      continue;
+    }
+    if (o.nilai === undefined || o.nilai === null) {
+      // ⚠️ Nilai kosong TANPA sumber yang dikenal itu setelan yang belum jadi,
+      // bukan "biarkan default". Dilewati diam-diam berarti kolom wajib
+      // tertinggal kosong dan INSERT-nya gagal dengan pesan PostgreSQL.
+      masalah.push({
+        jenis: "konfigurasi",
+        sebab: `kolom otomatis "${o.kolom}" tidak punya nilai maupun sumber yang dikenal (karyawan, bangkit)`,
+      });
+      continue;
+    }
+    perubahan.push({ kolom: o.kolom, label: o.label ?? o.kolom, dari: "", jadi: String(o.nilai) });
+  }
+
+  // ---- kolom pemilik, SELALU dari sesi ----
+  if (!boleh.has(kolomPemilik)) tolakKolom(kolomPemilik);
+  else perubahan.push({ kolom: kolomPemilik, label: "Atas nama", dari: "", jadi: idEmployee });
+
+  if (masalah.length > 0) return { ok: false, masalah };
+  if (perubahan.length === 0) return { ok: false, masalah: [{ jenis: "tanpa-perubahan" }] };
+
+  // Judul baris: isian teks bebas pertama yang wajib — untuk tiket itu
+  // judulnya. Kalau tidak ada, kartunya menyebut tabelnya saja; lebih baik
+  // begitu daripada menampilkan UUID yang tidak berarti apa-apa.
+  const judul = k.isian.find((i) => i.wajib && !i.pilihan && sudah.has(i.kolom));
+  return {
+    ok: true,
+    draf: {
+      kode: k.kode,
+      operasi: k.operasi,
+      tabel: k.tabel,
+      kunci: {},
+      judulBaris: judul ? sudah.get(judul.kolom)! : "(baris baru)",
+      keterangan: [],
+      dibangkitkan,
+      perubahan,
+    },
+  };
+}
+
+/**
+ * Susun rancangan untuk operasi tulis apa pun.
+ *
+ * ⚠️ `tambah` masuk ke sini sejak 21 Okt 2026. `tiket.ts` TETAP ADA dan tetap
+ * yang melayani `buat_tiket` — memindahkannya butuh pembuktian tersendiri
+ * (jalankan dua jalur berdampingan, bandingkan rancangannya), dan itu bukan
+ * pekerjaan yang sama dengan membuat jalur umumnya bisa.
  */
 export async function susunDrafUmum(
   k: KonfigTulis,
@@ -234,9 +457,7 @@ export async function susunDrafUmum(
   if (!idEmployee) {
     return { ok: false, masalah: [{ jenis: "konfigurasi", sebab: "Sesi tidak terhubung ke data karyawan." }] };
   }
-  if (k.operasi === "tambah") {
-    return { ok: false, masalah: [{ jenis: "konfigurasi", sebab: "Operasi tambah belum lewat penjalan umum." }] };
-  }
+  if (k.operasi === "tambah") return susunDrafTambah(k, idEmployee, masukan);
 
   const kolomPemilik = TABEL_BOLEH[k.tabel];
   const boleh = await kolomBolehTulis(k.tabel, "UPDATE");
@@ -348,6 +569,9 @@ export async function susunDrafUmum(
       kunci,
       judulBaris: nilaiKunci,
       keterangan,
+      // `ubah`/`hapus` tidak pernah membangkitkan nilai: barisnya sudah ada,
+      // dan nomornya sudah punya pemilik.
+      dibangkitkan: [],
       perubahan,
     },
   };
@@ -373,6 +597,83 @@ export type HasilSimpan =
  * lagi di database — bukan cuma waktu menyusun rancangan. Di antara memeriksa
  * dan menyimpan ada jeda, dan dalam jeda itu teknisi bisa mengambil tiketnya.
  */
+/** Berapa kali mencoba lagi kalau nilai yang dibangkitkan bentrok. */
+const MAKS_COBA = 3;
+
+/**
+ * Jalankan rancangan `tambah`.
+ *
+ * ⚠️ KOLOM YANG DIBANGKITKAN DIHITUNG DI SINI, BUKAN DI RANCANGAN — dan itu
+ * yang membuat percobaan ulang mungkin. Dua orang yang membuka kartu
+ * bersamaan akan sama-sama berhasil: masing-masing menghitung nomornya sendiri
+ * tepat sebelum INSERT, dan yang bentrok mengulang dengan `lewati` naik satu.
+ *
+ * ⚠️ `23505` adalah unique_violation. Ditangani khusus karena itu satu-satunya
+ * galat yang WAJAR terjadi di sini dan bisa diperbaiki dengan mengulang.
+ * Galat lain dipulangkan apa adanya — mengulangnya cuma menunda pesan yang
+ * sama tiga kali.
+ */
+async function jalankanTambah(
+  k: KonfigTulis,
+  idEmployee: string,
+  draf: Draf,
+): Promise<HasilSimpan> {
+  const boleh = await kolomBolehTulis(k.tabel, "INSERT");
+  const kolomPemilik = TABEL_BOLEH[k.tabel];
+
+  const kolom: string[] = [];
+  const nilai: unknown[] = [];
+  for (const p of draf.perubahan) {
+    if (!boleh.has(p.kolom)) return { ok: false, sebab: "gagal", pesan: `kolom "${p.kolom}" tidak boleh ditulis` };
+    kolom.push(p.kolom);
+    // ⚠️ Kolom pemilik diambil ULANG dari sesi, bukan dari rancangan. Rancangan
+    // melewati klien, dan satu-satunya nilai yang tidak boleh berasal dari sana
+    // adalah yang menentukan baris ini milik siapa.
+    nilai.push(p.kolom === kolomPemilik ? idEmployee : p.jadi);
+  }
+
+  // Pembangkit dicari ULANG dari setelan, bukan dari rancangan — nama
+  // pembangkit yang ikut rancangan akan datang dari klien.
+  const bangkit = k.otomatis
+    .filter((o) => o.sumber === "bangkit")
+    .map((o) => ({ kolom: o.kolom, periksa: periksaPembangkit(o.pembangkit, k.tabel) }));
+  for (const b of bangkit) {
+    if (!b.periksa.ok) return { ok: false, sebab: "gagal", pesan: b.periksa.sebab };
+    if (!boleh.has(b.kolom)) return { ok: false, sebab: "gagal", pesan: `kolom "${b.kolom}" tidak boleh ditulis` };
+  }
+
+  const db = poolTulis();
+  for (let coba = 1; coba <= MAKS_COBA; coba++) {
+    const kolomKini = [...kolom];
+    const nilaiKini = [...nilai];
+    for (const b of bangkit) {
+      if (!b.periksa.ok) continue; // sudah ditolak di atas; ada supaya tipenya sempit
+      kolomKini.push(b.kolom);
+      nilaiKini.push(await b.periksa.pembangkit.buat(db, coba - 1));
+    }
+    const tanya = kolomKini.map((_, i) => `$${i + 1}`).join(", ");
+    try {
+      await db.query(
+        `INSERT INTO ${nama(k.tabel)} (${kolomKini.map(nama).join(", ")}) VALUES (${tanya})`,
+        nilaiKini,
+      );
+      return { ok: true, draf };
+    } catch (e) {
+      const kode = (e as { code?: string }).code;
+      if (kode === "23505" && coba < MAKS_COBA && bangkit.length > 0) continue;
+      return {
+        ok: false,
+        sebab: "gagal",
+        pesan:
+          kode === "23505"
+            ? `Nilai yang dibangkitkan bentrok ${coba} kali berturut-turut. Coba lagi sebentar.`
+            : `Gagal menyimpan: ${(e as Error).message}`,
+      };
+    }
+  }
+  return { ok: false, sebab: "gagal", pesan: "Gagal menyimpan." };
+}
+
 export async function jalankanUmum(
   k: KonfigTulis,
   idEmployee: string | null,
@@ -389,6 +690,8 @@ export async function jalankanUmum(
       pesan: "Barisnya berubah sejak rancangan ditampilkan. Lihat sekali lagi sebelum menyimpan.",
     };
   }
+
+  if (k.operasi === "tambah") return jalankanTambah(k, idEmployee!, draf);
 
   const boleh = await kolomBolehTulis(k.tabel, "UPDATE");
   const set: string[] = [];

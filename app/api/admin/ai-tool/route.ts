@@ -264,10 +264,17 @@ export async function PUT(req: Request) {
       nama: String(m.nama ?? ""),
       deskripsi: String(m.deskripsi ?? ""),
       sumber: String(m.sumber ?? ""),
-      operasi: (m.operasi === "hapus" ? "hapus" : "ubah") as "ubah" | "hapus",
+      // ⚠️ DAFTAR-BOLEH, bukan diteruskan apa adanya. Nilai di luar ketiganya
+      // jatuh ke "ubah", bukan jadi operasi karangan yang lolos ke penyusun SQL.
+      operasi: (m.operasi === "hapus" || m.operasi === "tambah" ? m.operasi : "ubah") as
+        "tambah" | "ubah" | "hapus",
       kunci: Array.isArray(m.kunci) ? (m.kunci as { kolom: string; label: string }[]) : [],
       isian: Array.isArray(m.isian) ? (m.isian as { kolom: string; label: string; maks?: number }[]) : [],
-      otomatis: Array.isArray(m.otomatis) ? (m.otomatis as { kolom: string; label: string; nilai: string }[]) : [],
+      // `pembangkit` ikut disalin; `buatToolTulisBaru()` yang memeriksa namanya
+      // dikenal dan memang untuk tabel ini.
+      otomatis: Array.isArray(m.otomatis)
+        ? (m.otomatis as { kolom: string; label: string; nilai?: string; pembangkit?: string }[])
+        : [],
       syarat: Array.isArray(m.syarat) ? (m.syarat as { kolom: string; boleh: string[] }[]) : [],
       izin: typeof m.izin === "string" && m.izin.trim() ? m.izin.trim() : null,
       contoh: typeof m.contoh === "string" ? m.contoh : null,

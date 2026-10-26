@@ -11,6 +11,7 @@ import { tabelDariSql } from "@/lib/sumber-data";
 import { rapikanJawaban, latexTakTerurus } from "@/lib/rapikan-jawaban";
 import { SumberJawaban } from "./sumber-jawaban";
 import { PilihModel } from "./pilih-model";
+import type { PilihanModel } from "@/voltagent/models";
 import { KonfirmasiEntri, type DrafEntri } from "./konfirmasi-entri";
 import { KonfirmasiBatal, type DrafBatal } from "./konfirmasi-batal";
 import { KonfirmasiLembur, type DrafLemburEntri } from "./konfirmasi-lembur";
@@ -394,6 +395,7 @@ export function Chat({
   departemen,
   contoh,
   agent,
+  modelDitawarkan,
 }: {
   departemen: string;
   contoh: string[];
@@ -403,6 +405,11 @@ export function Chat({
    * bingkai departemen yang lama, bukan kosong sama sekali.
    */
   agent?: { nama: string; terbuka: boolean; jumlahTool: number }[];
+  /**
+   * Model yang pantas ditawarkan, dari server. Qwen cuma muncul kalau
+   * `QWEN_API_URL`/`QWEN_API_KEY` terisi — dan itu tidak terbaca dari klien.
+   */
+  modelDitawarkan?: PilihanModel[];
 }) {
   const [input, setInput] = useState("");
 
@@ -1155,7 +1162,7 @@ export function Chat({
 
             <div className="flex items-center justify-between gap-2 px-2 pt-1 pb-0.5">
               <div className="flex min-w-0 items-center gap-2 text-[11px] text-tinta-lemah">
-                <PilihModel nilai={model} onPilih={setModel} />
+                <PilihModel nilai={model} onPilih={setModel} daftar={modelDitawarkan} />
                 {/* Keterangan tetap di luar dropdown supaya terbaca tanpa
                     membukanya dulu. */}
                 <span className="truncate">

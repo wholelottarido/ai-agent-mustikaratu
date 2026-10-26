@@ -46,9 +46,20 @@ try {
   cek("portal_ticket ada", Boolean(tiket));
   if (!tiket) throw new Error("portal_ticket tidak ada di daftar target");
 
-  const bisaTulis = tiket.kolom.filter((k) => k.bisaTulis).map((k) => k.nama);
-  console.log(`  kolom yang boleh ditulis: ${bisaTulis.join(", ")}`);
-  cek("kolom yang boleh ditulis dibaca dari hak database", bisaTulis.length > 0, `${bisaTulis.length} kolom`);
+  // ⚠️ DUA HAK, BUKAN SATU (21 Okt 2026). `bisaIsi` = INSERT, `bisaUbah` =
+  // UPDATE, dan daftarnya memang berbeda: `no_ticket` boleh diisi saat tiket
+  // lahir tapi tidak boleh diubah sesudahnya.
+  const bisaTulis = tiket.kolom.filter((k) => k.bisaUbah).map((k) => k.nama);
+  const bisaIsi = tiket.kolom.filter((k) => k.bisaIsi).map((k) => k.nama);
+  console.log(`  boleh DIUBAH : ${bisaTulis.join(", ")}`);
+  console.log(`  boleh DIISI  : ${bisaIsi.join(", ")}`);
+  cek("kolom yang boleh diubah dibaca dari hak database", bisaTulis.length > 0, `${bisaTulis.length} kolom`);
+  cek("kolom yang boleh diisi dibaca dari hak database", bisaIsi.length > 0, `${bisaIsi.length} kolom`);
+  // ⚠️ Kedua daftar harus BEDA. Kalau sama, hampir pasti keduanya dibaca dari
+  // hak yang sama dan salah satunya bohong.
+  cek("hak isi dan hak ubah memang berbeda",
+    JSON.stringify(bisaIsi) !== JSON.stringify(bisaTulis),
+    `isi ${bisaIsi.length}, ubah ${bisaTulis.length}`);
   // ⚠️ Kalau ini kosong, borang akan terlihat seolah tidak ada yang bisa diisi
   // — persis gejala waktu haknya dibaca lewat tampilan yang salah.
   cek("kolom TERLARANG tidak ikut ditawarkan",

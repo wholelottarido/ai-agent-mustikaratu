@@ -15,7 +15,10 @@ import {
   KUNCI_SUMBER,
   validasiModel,
 } from "@/voltagent";
-import { ambilModel, alamatOllama, ollamaHidup, pesanGalatOllama } from "@/voltagent/models";
+import {
+  ambilModel, alamatOllama, ollamaHidup, pesanGalatOllama,
+  alamatQwen, qwenHidup,
+} from "@/voltagent/models";
 import { siapkanAgent, jalurDiminta } from "@/voltagent/jalur-agent";
 import type { Rancangan } from "@/voltagent/registry-tulis";
 
@@ -126,6 +129,26 @@ export async function POST(req: Request) {
             `Model lokal "${pilihan.label}" butuh Ollama berjalan, tapi ` +
             `${alamatOllama()} tidak bisa dihubungi. Nyalakan Ollama dulu, ` +
             `atau pilih model Claude di dropdown.`,
+        },
+        { status: 503 },
+      );
+    }
+
+    // ⚠️ URL Qwen BERUBAH-UBAH, dan itu kejadian rutin bukan kasus langka.
+    //
+    // Dia jalan di Google Colab lewat quick tunnel `trycloudflare.com`, yang
+    // memberi alamat acak baru tiap kali dijalankan. Jadi `QWEN_API_URL` jadi
+    // usang setiap Colab dimulai ulang. Tanpa pemeriksaan ini pemakai cuma
+    // melihat "fetch failed" dan menyangka portalnya yang rusak.
+    //
+    // Pola dan alasannya sama persis dengan pemeriksaan Ollama di atas.
+    if (pilihan.penyedia === "qwen" && !(await qwenHidup())) {
+      return Response.json(
+        {
+          error:
+            `Model "${pilihan.label}" tidak bisa dihubungi di ${alamatQwen() || "(QWEN_API_URL belum diisi)"}. ` +
+            `Alamat tunnel Colab berganti tiap kali dijalankan ulang — periksa QWEN_API_URL ` +
+            `di .env.local, atau pilih model lain di dropdown.`,
         },
         { status: 503 },
       );

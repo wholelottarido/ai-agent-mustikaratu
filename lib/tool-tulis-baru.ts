@@ -36,12 +36,30 @@ import { poolKonfig } from "./db-konfig";
 import { poolPerusahaan } from "./db-perusahaan";
 import { muatKonfig, lupakanKonfig } from "./ai-konfig";
 import { TABEL_BOLEH } from "./entri/tulis-umum";
+import { periksaPembangkit, pembangkitUntuk } from "./entri/pembangkit";
 import { izinAda, type HasilUbah } from "./ubah-tool";
 
 const PEMILIK = "magang";
 
 /** Satu kolom tabel sasaran, untuk ditawarkan di borang. */
-export type KolomTarget = { nama: string; tipe: string; bisaTulis: boolean };
+export type KolomTarget = {
+  nama: string;
+  tipe: string;
+  /**
+   * Boleh DIISI saat baris lahir (hak INSERT).
+   *
+   * ⚠️ BERBEDA DARI `bisaUbah`, DAN BEDANYA NYATA: `no_ticket`, `id_category`,
+   * dan `id_sub_category` boleh diisi saat tiket dibuat, tapi TIDAK boleh
+   * diubah sesudahnya — memindahkan tiket antar kategori berarti
+   * memindahkannya ke antrean orang lain.
+   *
+   * Keduanya dipulangkan sekaligus supaya tidak ada pemanggil yang menanyakan
+   * hak yang keliru untuk operasinya.
+   */
+  bisaIsi: boolean;
+  /** Boleh DIUBAH sesudah barisnya ada (hak UPDATE). */
+  bisaUbah: boolean;
+};
 
 export type TargetTulis = {
   /** Sumber data yang mengarah ke tabel ini — penentu tabel sasarannya. */
@@ -49,6 +67,15 @@ export type TargetTulis = {
   namaSumber: string;
   tabel: string;
   kolom: KolomTarget[];
+  /**
+   * Pembangkit nilai yang tersedia untuk tabel ini.
+   *
+   * Borang memilih dari daftar ini; ia tidak pernah mengetik format sendiri.
+   * Kosong berarti tabel ini tidak punya kolom yang perlu dibangkitkan.
+   */
+  pembangkit: { kode: string; nama: string }[];
+  /** Kolom pemilik. Tidak boleh disebut borang — penjalan mengisinya dari sesi. */
+  kolomPemilik: string;
 };
 
 /**
@@ -123,19 +150,24 @@ export async function targetTulis(): Promise<TargetTulis[]> {
   const user = process.env.DEMO_PG_TULIS_USER ?? "ai_tulis";
   const hasil: TargetTulis[] = [];
   for (const [tabel, s] of perTabel) {
-    const { rows } = await poolPerusahaan().query<{ nama: string; tipe: string; tulis: boolean }>(
+    const { rows } = await poolPerusahaan().query<{
+      nama: string; tipe: string; isi: boolean; ubah: boolean;
+    }>(
       `SELECT a.attname AS nama, format_type(a.atttypid, a.atttypmod) AS tipe,
-              has_column_privilege($2, a.attrelid, a.attname, 'UPDATE') AS tulis
+              has_column_privilege($2, a.attrelid, a.attname, 'INSERT') AS isi,
+              has_column_privilege($2, a.attrelid, a.attname, 'UPDATE') AS ubah
          FROM pg_attribute a
         WHERE a.attrelid = $1::regclass AND a.attnum > 0 AND NOT a.attisdropped
         ORDER BY a.attnum`,
       [tabel, user],
     );
     hasil.push({
+      pembangkit: pembangkitUntuk(tabel),
+      kolomPemilik: TABEL_BOLEH[tabel],
       sumber: s.kode,
       namaSumber: s.nama,
       tabel,
-      kolom: rows.map((r) => ({ nama: r.nama, tipe: r.tipe, bisaTulis: r.tulis })),
+      kolom: rows.map((r) => ({ nama: r.nama, tipe: r.tipe, bisaIsi: r.isi, bisaUbah: r.ubah })),
     });
   }
   return hasil;
@@ -147,11 +179,17 @@ export type ToolTulisBaru = {
   deskripsi: string;
   /** Sumber data yang mengarah ke tabel sasaran. */
   sumber: string;
-  /** `tambah` belum punya penjalan umum — lihat `tulis-umum.ts`. */
-  operasi: "ubah" | "hapus";
+  operasi: "tambah" | "ubah" | "hapus";
+  /** Kosong untuk `tambah` — baris baru tidak punya kunci untuk dicocokkan. */
   kunci: { kolom: string; label: string }[];
   isian: { kolom: string; label: string; maks?: number }[];
-  otomatis: { kolom: string; label: string; nilai: string }[];
+  /**
+   * Nilai tetap, ATAU kolom yang dibangkitkan saat menyimpan.
+   *
+   * `pembangkit` diisi nama dari `lib/entri/pembangkit.ts` — borang memilih
+   * dari daftar itu, tidak mengetik format sendiri.
+   */
+  otomatis: { kolom: string; label: string; nilai?: string; pembangkit?: string }[];
   syarat: { kolom: string; boleh: string[] }[];
   izin?: string | null;
   contoh: string | null;
@@ -166,10 +204,14 @@ export async function buatToolTulisBaru(b: ToolTulisBaru): Promise<HasilUbah> {
   if (b.deskripsi.trim().length < 15) {
     return { ok: false, sebab: "deskripsi untuk model minimal 15 huruf — ini satu-satunya dasar model memilih tool" };
   }
-  if (b.operasi !== "ubah" && b.operasi !== "hapus") {
-    return { ok: false, sebab: `operasi "${b.operasi}" belum punya penjalan umum; yang bisa: ubah, hapus` };
+  if (b.operasi !== "tambah" && b.operasi !== "ubah" && b.operasi !== "hapus") {
+    return { ok: false, sebab: `operasi "${b.operasi}" tidak dikenal; yang bisa: tambah, ubah, hapus` };
   }
+  const tambah = b.operasi === "tambah";
 
+  // ⚠️ HAK YANG DITANYAKAN IKUT OPERASINYA. `no_ticket` boleh DIISI saat tiket
+  // lahir tapi tidak boleh DIUBAH sesudahnya; menanyakan hak UPDATE untuk
+  // borang `tambah` akan menyembunyikan kolom yang justru wajib diisi.
   const semua = await targetTulis();
   const target = semua.find((t) => t.sumber === b.sumber);
   if (!target) {
@@ -181,13 +223,52 @@ export async function buatToolTulisBaru(b: ToolTulisBaru): Promise<HasilUbah> {
     };
   }
 
-  // ⚠️ KUNCI WAJIB. Tanpa kunci, yang dirangkai penjalan adalah UPDATE tanpa
-  // WHERE — satu perintah menyentuh seluruh tabel.
-  if (b.kunci.length === 0) {
-    return { ok: false, sebab: "minimal satu kolom kunci — tanpa itu perintahnya menyentuh seluruh tabel" };
+  if (tambah) {
+    // ⚠️ KUNCI JUSTRU TIDAK BOLEH ADA. Baris yang belum lahir tidak punya
+    // kunci untuk dicocokkan, dan `kolom_kunci` yang terisi akan membuat
+    // pembacanya menyangka ini operasi yang menyentuh baris yang sudah ada.
+    if (b.kunci.length > 0) {
+      return { ok: false, sebab: "operasi tambah tidak memakai kolom kunci — barisnya belum ada" };
+    }
+    if (b.syarat.length > 0) {
+      return { ok: false, sebab: "operasi tambah tidak memakai syarat — tidak ada baris lama yang bisa diperiksa" };
+    }
+    if (b.isian.length === 0) {
+      return { ok: false, sebab: "minimal satu kolom isian — tanpa itu tidak ada yang bisa diisi user" };
+    }
+  } else {
+    // ⚠️ KUNCI WAJIB. Tanpa kunci, yang dirangkai penjalan adalah UPDATE tanpa
+    // WHERE — satu perintah menyentuh seluruh tabel.
+    if (b.kunci.length === 0) {
+      return { ok: false, sebab: "minimal satu kolom kunci — tanpa itu perintahnya menyentuh seluruh tabel" };
+    }
+    if (b.isian.length === 0 && b.otomatis.length === 0) {
+      return { ok: false, sebab: "tidak ada yang diubah: isi minimal satu kolom isian atau satu nilai tetap" };
+    }
   }
-  if (b.isian.length === 0 && b.otomatis.length === 0) {
-    return { ok: false, sebab: "tidak ada yang diubah: isi minimal satu kolom isian atau satu nilai tetap" };
+
+  // ⚠️ KOLOM PEMILIK TIDAK BOLEH DISEBUT SAMA SEKALI. Penjalan selalu
+  // mengisinya dari sesi; menyebutnya di borang berarti ada dua tempat yang
+  // mengaku menentukan baris ini milik siapa, dan yang satu bisa salah.
+  const kolomPemilik = TABEL_BOLEH[target.tabel];
+  const menyebutPemilik = [...b.isian, ...b.otomatis, ...b.kunci].find((x) => x.kolom === kolomPemilik);
+  if (menyebutPemilik) {
+    return {
+      ok: false,
+      sebab: `kolom pemilik "${kolomPemilik}" tidak boleh disebut — penjalan selalu mengisinya dari sesi`,
+    };
+  }
+
+  // Pembangkit: namanya harus dikenal DAN memang untuk tabel ini.
+  for (const o of b.otomatis) {
+    if (!o.pembangkit) {
+      if (o.nilai === undefined || o.nilai === "") {
+        return { ok: false, sebab: `nilai tetap "${o.kolom}" kosong dan tidak menyebut pembangkit` };
+      }
+      continue;
+    }
+    const p = periksaPembangkit(o.pembangkit, target.tabel);
+    if (!p.ok) return p;
   }
 
   const kolom = new Map(target.kolom.map((k) => [k.nama, k]));
@@ -200,12 +281,14 @@ export async function buatToolTulisBaru(b: ToolTulisBaru): Promise<HasilUbah> {
     for (const x of daftar) {
       const k = kolom.get(x.kolom);
       if (!k) return { ok: false, sebab: `kolom "${x.kolom}" tidak ada di ${target.tabel} (${label})` };
-      if (perluTulis && !k.bisaTulis) {
+      // ⚠️ Hak yang diperiksa IKUT OPERASINYA, bukan satu hak untuk semua.
+      if (perluTulis && !(tambah ? k.bisaIsi : k.bisaUbah)) {
         return {
           ok: false,
           sebab:
-            `kolom "${x.kolom}" tidak boleh ditulis role database — hak UPDATE-nya belum diberikan (${label}). ` +
-            `Tambahkan ke KOLOM_UBAH di scripts/buat-pg-tulis.mts lalu jalankan ulang skripnya.`,
+            `kolom "${x.kolom}" tidak boleh ditulis role database — hak ${tambah ? "INSERT" : "UPDATE"}-nya ` +
+            `belum diberikan (${label}). Tambahkan ke ${tambah ? "KOLOM_BUAT" : "KOLOM_UBAH"} di ` +
+            `scripts/buat-pg-tulis.mts lalu jalankan ulang skripnya.`,
         };
       }
     }
@@ -229,6 +312,21 @@ export async function buatToolTulisBaru(b: ToolTulisBaru): Promise<HasilUbah> {
   const [ada] = (await poolKonfig().query(`SELECT 1 FROM ai_tool WHERE kode = $1`, [b.kode])).rows;
   if (ada) return { ok: false, sebab: `kode "${b.kode}" sudah dipakai tool lain` };
 
+  /**
+   * ⚠️ `sumber: "bangkit"` DITAMBAHKAN DI SINI, bukan diminta dari borang.
+   *
+   * Penjalan membedakan nilai tetap dari nilai yang dibangkitkan lewat
+   * `sumber`. Kalau borang yang mengirimnya, satu baris yang menyebut
+   * `pembangkit` tanpa `sumber` akan tersimpan sebagai nilai tetap kosong —
+   * dan kolomnya tertinggal kosong waktu INSERT, dengan galat PostgreSQL yang
+   * tidak menunjuk sebabnya.
+   */
+  const otomatisTersimpan = b.otomatis.map((o) =>
+    o.pembangkit
+      ? { kolom: o.kolom, label: o.label, sumber: "bangkit", pembangkit: o.pembangkit }
+      : { kolom: o.kolom, label: o.label, nilai: o.nilai },
+  );
+
   // `kolom` dan `filter` diisi kosong: keduanya milik tool BACA. `cakupan_bawaan`
   // diisi `diri` supaya lolos CHECK kolomnya — penjalan tulis tidak memakainya,
   // karena penyaring pemiliknya selalu ikut tanpa melihat setelan ini.
@@ -243,7 +341,7 @@ export async function buatToolTulisBaru(b: ToolTulisBaru): Promise<HasilUbah> {
        FROM ai_sumber_data s WHERE s.kode = $14`,
     [
       b.kode, b.nama.trim(), b.deskripsi.trim(), b.operasi, target.tabel,
-      JSON.stringify(b.isian), JSON.stringify(b.otomatis),
+      JSON.stringify(b.isian), JSON.stringify(otomatisTersimpan),
       JSON.stringify(b.kunci), JSON.stringify(b.syarat),
       b.contoh?.trim() || null, b.izin ?? null, b.idApps ?? null, PEMILIK, b.sumber,
     ],

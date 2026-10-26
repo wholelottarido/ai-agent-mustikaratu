@@ -265,6 +265,10 @@ Karena itu dua kebiasaan ini **wajib**, dan jangan dilonggarkan:
 | Layar pengaturan (tim IT saja) | `app/kelola-ai/`, `app/api/admin/ai-tool/route.ts` |
 | Izin pemakai dari peran | `lib/akses-aplikasi.ts` |
 | Merapikan LaTeX di jawaban | `lib/rapikan-jawaban.ts` |
+| Pembangkit nilai (nomor tiket) | `lib/entri/pembangkit.ts` |
+| Pilihan bertingkat (kategori → sub-kategori) | `lib/entri/pilihan.ts` |
+| Whitelist model & penyedia | `voltagent/models.ts` |
+| Perute jalur konfigurasi (instruksinya) | `buatRouter()` di `voltagent/agent-konfig.ts` |
 
 ### Arsitektur LAMA (23 Sep 2026, catatan sejarah)
 
@@ -4510,6 +4514,222 @@ menghasilkan hal yang sama.
 pertanyaan di peringkat-1, ditukar dengan rujukan yang bisa diperiksa dan
 vektor yang tidak lagi bergantung pada batch.
 
+### Tahap 27 — Qwen 14B lewat API, dan bug perute yang ia bongkar (21 Okt 2026)
+
+Spesifikasi lengkapnya di `docs/model-qwen.md` (ditulis pemilik proyek).
+
+Qwen2.5 14B jalan di **Google Colab** (T4, 4-bit NF4), dibungkus FastAPI buatan
+sendiri, diakses lewat tunnel Cloudflare. Endpoint OpenAI-compatible.
+
+⚠️ **BUKAN "model lokal".** Dia penyedia `qwen`, SENGAJA dipisah dari `server`
+(Bifrost di kantor) dan dari `lokal` (Ollama di laptop). Nama grup di dropdown
+berbunyi "Qwen di Colab (luar kantor)" — pertanyaan dan hasil query perusahaan
+melewati pihak ketiga, dan nama itu satu-satunya tempat pemakai bisa tahu
+sebelum menekan kirim.
+
+| Berkas | Isi |
+|---|---|
+| `voltagent/models.ts` | penyedia `qwen`, `qwenDisetel()`, `qwenHidup()`, `modelDitawarkan()` |
+| `voltagent/agents.ts` | klien `createOpenAICompatible` + pembungkus non-streaming |
+| `app/api/chat/route.ts` | balasan 503 waktu endpoint tidak terjangkau |
+| `app/components/pilih-model.tsx` | menerima daftar model DARI SERVER |
+| Uji | `test:qwen-setelan` (31, tanpa jaringan) · `test:qwen-tool` (manual, butuh Colab) |
+
+#### ⚠️ DUA PENGHALANG YANG BARU KETAHUAN SAAT DICOBA
+
+**1. `{"detail":"Streaming unsupported"}` — HTTP 400.** Seluruh portal memanggil
+`streamText()`, jadi tanpa perbaikan model ini TIDAK PERNAH bisa menjawab satu
+pertanyaan pun. Dibungkus `simulateStreamingMiddleware` (dari paket `ai`):
+memanggil jalur non-streaming lalu memancarkan hasilnya sebagai satu potongan,
+tanpa jeda buatan. Penyedia lain tidak disentuh.
+
+⚠️ Akibat sampingan yang berguna: untuk model ini jawaban utuh sudah ada di
+server SEBELUM sepotong pun sampai ke browser. Kalau suatu hari penahan
+jawaban palsu versi server-side dikerjakan, jalur ini sudah siap.
+
+**2. `{"detail":"Prompt too long"}` — batas 2.048 token.** Diukur dengan
+menaikkan panjang prompt bertahap: lolos ~1.950, ditolak ~3.900. Prompt agent
+portal ~3.300 token (instruksi 4.940 huruf + 8 tool 5.866 huruf). Pemilik
+proyek menaikkannya ke 8.192; sesudah itu nol kegagalan.
+
+#### Hasil ukur lewat portal sungguhan
+
+6 pertanyaan, akun `marketing1`, dibandingkan dengan Haiku 4.5:
+
+| | Qwen 14B | Haiku 4.5 |
+|---|---|---|
+| Benar | **6/6** | **6/6** |
+| Latensi | 9,6–23,4 dtk | 4,6–12,4 dtk |
+| Token masuk | ~2.500 | ~3.700 |
+| Menolak tanpa mengarang | 2/2 | 2/2 |
+
+Token masuk Haiku LEBIH BESAR untuk pertanyaan yang sama, dan itu bukan
+pemborosan — itu tanda putaran kedua (panggil tool → terima hasil → panggil
+model lagi). Qwen cenderung berhenti di satu putaran. Relevan untuk
+"multi-step tool calling" yang belum terbukti.
+
+Haiku juga lebih teliti: ditanya "siapa atasan saya", Haiku menjawab "Atasan:
+tidak tercatat", Qwen menyodorkan nama & jabatan tanpa menyebut bahwa kolom
+atasannya kosong. Bukan karangan, tapi tidak menjawab yang ditanya.
+
+Pembanding Qwen 7B lokal yang dulu ditolak: memanggil tool 2/6, sering
+mengarang. Yang 14B 6/6 dan menolak dengan benar dua kali.
+
+#### ⚠️ BUG YANG DIBONGKAR: PERUTE TIDAK MENERUSKAN PERTANYAAN PROSEDUR
+
+Gejala: "Bagaimana cara mengajukan cuti?" dijawab perute sendiri — *"tidak
+dapat didelegasikan ke agent yang ada"*. `cari_sop` tidak pernah dipanggil.
+
+**Dan HAIKU gagal sama persis.** Itu yang membuktikan ini lubang instruksi,
+bukan kelemahan model.
+
+Sebabnya aturan 1 perute cuma menyebut *"Pertanyaan tentang DATA"*. Pertanyaan
+PROSEDUR tidak disebut sama sekali, jadi perute menyimpulkan sendiri — dan
+menyimpulkan salah. Kelas bug yang sama dengan Tahap 16B (waktu itu terbalik:
+tabel cuma mengenal "bagaimana cara…" dan buta terhadap keluhan gejala).
+
+Diperbaiki DUA tempat, dan yang kedua tidak ada di rencana awal:
+
+1. **Aturan 2 baru** — pertanyaan prosedur selalu diteruskan, dengan alasannya
+   eksplisit: *"Kamu TIDAK BISA tahu sebuah prosedur ada atau tidak tanpa
+   bertanya."* Melarang saja tidak cukup; model perlu tahu kenapa
+   kesimpulannya mustahil.
+2. **Aturan "tidak ada agent yang cocok" diberi pagar.** Itu JALAN KELUAR yang
+   dipakai kedua model untuk kabur — mereka memakainya *sebagai ganti*
+   bertanya. Sekarang ditegaskan: berlaku SESUDAH bertanya, bukan
+   penggantinya. Tanpa ini, aturan baru bertabrakan dengan aturan lama dan
+   model bebas memilih yang mana.
+
+Terbukti di Haiku: token masuk **1.681 → 4.390**, jawabannya langkah nyata
+dari SOP. Qwen belum dikonfirmasi — Colab-nya mati saat uji ulang.
+
+#### ⚠️ SAYA MENUDUH RAM DUA KALI, DUA-DUANYA SALAH
+
+Pertanyaan SOP gagal, dan dugaan pertama saya model embedding tidak muat
+(RAM 0,05–0,29 GB bebas dari 7,31). Diuji langsung, tanpa model bahasa:
+
+```
+embed()    4,4 dtk, 768 dimensi, RSS 258 -> 568 MB   BERHASIL
+cariSop()  5,3 dtk, 5 potongan                        BERHASIL
+           0.846  Panduan Mengajukan Request (Cuti, Lembur, dll)   <- peringkat 1
+           0.807  Cara Mengatur Kuota Ratu AI Karyawan
+```
+
+Embedding dan vector search **sehat sepenuhnya**. 320 potongan di
+`ai_knowledge.chunks` semuanya `multilingual-e5-base@q8`, 768 dimensi — cocok
+dengan yang kita hitung lokal.
+
+Pelajarannya: gejala "fitur RAG gagal" di mesin yang RAM-nya sesak SANGAT
+menggoda untuk disimpulkan sebagai masalah memori. Dua kali saya
+menyimpulkannya, dua kali salah, dan nyaris menyuruh pemilik proyek bertanya
+ke tim pemilik schema untuk hal yang tidak perlu. **Uji lapisannya satu per
+satu sebelum menuduh yang paling mencurigakan.**
+
+#### ⚠️ `test:routing` TIDAK MENJAGA PERUTE
+
+Ketahuan waktu hendak menambahkan kasus ke sana: `test:routing` memakai
+`ambilDepartemen("it")` — jalur LAMA, satu agent departemen, tanpa perute.
+Lapisan perute jalur konfigurasi **tidak pernah diuji sejak dibuat**, dan di
+situlah bug ini bersembunyi.
+
+`npm run test:perute` (`scripts/test-perute-konfig.mts`) mengisinya. Penanda
+yang dipakai STRUKTURAL — apakah `delegate_task` dipanggil — bukan mencocokkan
+kalimat penolakan, yang sudah dua kali terbukti rapuh (lihat Tahap 17).
+
+Satu kasus sengaja NEGATIF: "Halo, kamu bisa bantu apa saja?" TIDAK boleh
+didelegasikan. Perbaikan yang membuat perute mendelegasikan segalanya tidak
+lebih baik daripada yang tidak mendelegasikan apa pun.
+
+#### Catatan operasional Qwen
+
+- **URL tunnel BERGANTI tiap Colab dijalankan ulang.** Itu sifat quick tunnel
+  `trycloudflare.com`. `qwenHidup()` menerjemahkannya jadi pesan yang menyebut
+  `QWEN_API_URL`, bukan "fetch failed".
+- **Colab tidak dijamin hidup.** Terbukti mati di tengah sesi; yang menjawab
+  jadi halaman galat Cloudflare, dan permintaan kembali dalam 0,5 detik
+  dengan jawaban kosong.
+- ⚠️ **`QWEN_ENABLED:true` di `.env.local` memakai titik dua, bukan `=`.**
+  Baris itu TIDAK terbaca sebagai variabel environment. Kode tidak bergantung
+  padanya (ketersediaan dari URL + kunci + wajib HTTPS), jadi tidak ada yang
+  rusak — tapi saklarnya juga tidak berfungsi.
+
+#### Yang BELUM selesai
+
+- Uji prosedur untuk Qwen (butuh Colab hidup)
+- Multi-step tool calling pada Qwen belum terbukti
+- ⚠️ **§14 "data perusahaan dibatasi dari inferensi jarak jauh" belum punya
+  MEKANISME** — baru disiplin saat menguji. Siapa pun yang memilih Qwen di
+  dropdown mengirim hasil tool (nomor tiket, NIK, nama atasan) ke Colab.
+  Terbukti nyata: satu uji mengirim `SUDARTO · Sales · Salesman · PT Mustika
+  Ratubuana Int` ke sana.
+
+---
+
+### Tahap 26 — operasi `tambah` di penjalan umum (21 Okt 2026)
+
+Sisa hardcode terakhir di jalur tulis. Sesudah ini penjalan umum bisa
+`tambah`, `ubah`, dan `hapus` — semuanya dari baris setelan.
+
+| Berkas | Isi |
+|---|---|
+| `lib/entri/pembangkit.ts` (baru) | daftar pembangkit nilai; `nomorBerikutnya` pindah ke sini |
+| `lib/entri/pilihan.ts` (baru) | pilihan bertingkat + daftar-boleh tabel yang boleh dibaca |
+| `lib/entri/tulis-umum.ts` | `susunDrafTambah()` + `jalankanTambah()` |
+| `app/components/konfirmasi-umum.tsx` | kartu `tambah` (tanpa coretan nilai lama) |
+| `lib/tool-tulis-baru.ts`, `app/kelola-ai/tool-baru.tsx` | borang menerima operasi Tambah |
+| Uji | `npm run test:tulis-tambah` — **32 pemeriksaan** |
+
+#### Konfigurasi MEMILIH pembangkit, tidak mendefinisikannya
+
+Nomor tiket tidak boleh datang dari setelan — format string yang dieksekusi
+itu kode, apa pun namanya, dan `ai_tool.kolom_otomatis` bisa ditulis role
+`ai_konfig` dari layar. Jadi:
+
+```
+PEMBANGKIT di kode   -> BAGAIMANA sebuah nilai dibangkitkan
+kolom_otomatis       -> pembangkit mana yang dipakai, DISEBUT NAMANYA saja
+```
+
+Nama yang tidak terdaftar ditolak `bacaKonfigTulis()`, bukan gagal belakangan.
+`tabel` ikut dicocokkan: tanpa itu, satu baris setelan bisa memasang
+`nomor_tiket` pada tabel lain dan menulis nomor berbentuk tiket ke kolom yang
+bukan nomor tiket — nilai yang terlihat masuk akal, di tempat yang salah.
+
+#### Tiga hal yang ditemukan saat mengerjakan
+
+**1. `cocokkan()` yang saya tulis memuat bug yang sudah ditutup 8 Okt.**
+Versi saya mencocokkan DUA ARAH; versi di `tiket.ts` sengaja satu arah, karena
+*"tidak mendesak"* memuat kata "mendesak" dan akan dipetakan ke URGENT —
+kebalikan maksudnya, tanpa galat. Dipakai versi mereka apa adanya, catatannya
+ikut pindah ke `pilihan.ts`.
+
+**2. Hak INSERT dan UPDATE daftarnya BERBEDA, dan bedanya nyata.**
+`no_ticket`, `id_category`, `id_sub_category` boleh DIISI saat tiket lahir
+tapi tidak boleh DIUBAH sesudahnya. Versi pertama saya memberi `targetTulis()`
+parameter operasi — itu keliru, pemanggil bisa bertanya hak yang salah.
+Sekarang memulangkan `bisaIsi` DAN `bisaUbah` sekaligus, dan ada uji bahwa
+kedua daftar memang berbeda.
+
+**3. Urutan setelan adalah urutan pengisian.** Induk yang disebut SESUDAH
+anaknya tidak akan pernah terisi waktu anaknya butuh — dan daftar sub-kategori
+yang disusun tanpa saringan induk justru yang berbahaya: sub-kategori milik
+kategori lain ikut lolos, tiket masuk antrean yang salah, tanpa galat.
+Ditolak `bacaKonfigTulis()`.
+
+#### Terbukti ujung ke ujung
+
+Tiket `T202610211110` lahir lewat penjalan umum: 13 huruf, kategori benar,
+pemilik dari SESI (bukan dari masukan), nomor dibangkitkan saat menyimpan —
+bukan saat rancangan disusun, supaya dua orang yang membuka kartu bersamaan
+tidak mendapat nomor yang sama. Dihapus lagi sesudahnya.
+
+⚠️ **`buat_tiket` TETAP memakai jalur khususnya.** Memindahkannya bukan
+"hapus entri `DAFTAR`" — pembuktiannya menjalankan dua jalur berdampingan
+untuk permintaan yang sama dan membandingkan rancangannya harus identik. Itu
+pekerjaan tersendiri.
+
+---
+
 ### Tahap 25 — gerbang persetujuan tool tulis tim lain (13 Okt 2026)
 
 Rincian harian: `docs/logbook-13-okt-2026.md`.
@@ -5288,15 +5508,29 @@ itu tidak salah-salah amat.
 7. **Dokumen `failed`** — 1 dokumen ("Menambah akun sosial media", "Tidak ada
    teks yang bisa dibaca"). OCR kita bisa menyelamatkannya kalau perlu.
 
-### Keadaan sekarang (14 Okt 2026)
+### Keadaan sekarang (26 Okt 2026)
 
 | | |
 |---|---|
-| Pemeriksaan otomatis (16 berkas uji) | **444**, 0 gagal |
-| Tool kita | 13 · tool tim lain terbaca 225 |
-| Tool tim lain ditolak pemeriksa | 12 (cakupan `diri`, sumbernya tanpa kolom pemilik) |
-| Tool tulis tim lain menunggu persetujuan | 5 |
+| Pemeriksaan otomatis | **444+** di 16 berkas lama, plus 4 berkas uji baru |
+| Model di dropdown | Sonnet 5 · Haiku 4.5 · Qwen 14B (Colab) · Gemma 12B (kantor) · Qwen 7B (Ollama) |
 | Port dev | **3018** — port 3000 dipakai proyek lain |
+| Belum di-commit | 27 berkas (Tahap 26 & 27) |
+
+Uji yang ditambahkan 21 Okt:
+
+```
+test:tulis-tambah     32   operasi `tambah` di penjalan umum
+test:qwen-setelan     31   setelan penyedia Qwen, TANPA jaringan
+test:perute            5   perute jalur konfigurasi (BARU — lapisan ini dulu tidak teruji)
+test:qwen-tool         -   manual, butuh Colab hidup; JANGAN masukkan ke suite
+test:lokal-jalur       -   manual, butuh server hidup
+```
+
+⚠️ **`test:qwen-tool` dan `test:lokal-jalur` sengaja di luar suite.** Yang
+pertama butuh Colab (mati = merah padahal tidak ada yang rusak, dan
+endpoint-nya memproses satu permintaan pada satu waktu sehingga berebut dengan
+orang yang sedang memakai portal); yang kedua butuh server hidup di 3018.
 
 Suite lengkap (jalankan satu per satu, bukan paralel — beberapa memakai
 database yang sama):
@@ -5312,20 +5546,27 @@ test:tulis-setuju  test:penjaga
 pool-nya menahan event loop hidup, dan skripnya mencetak hasil lalu
 **menggantung**. Di CI itu terbaca sebagai uji yang macet.
 
-### Berikutnya (rencana 14 Okt 2026)
+### Berikutnya (rencana 26 Okt 2026)
 
-1. **`npm run beda:katalog`** — membandingkan katalog tool tetangga dengan
+1. **Jalankan `npm run test:perute`** — butuh Laragon hidup. Ditulis 26 Okt
+   tapi BELUM PERNAH JALAN; perbaikan perute baru terbukti lewat uji manual
+   di Haiku, belum lewat uji otomatis.
+2. **Mekanisme pembatas data ke inferensi jarak jauh** (§14 `docs/model-qwen.md`).
+   Sekarang baru disiplin saat menguji. Keputusan bentuknya milik pemilik
+   proyek: batasi tool mana yang boleh waktu Qwen aktif, batasi siapa yang
+   boleh memilihnya, atau terima risikonya secara sadar.
+3. **Uji prosedur untuk Qwen** — butuh Colab hidup + `QWEN_API_URL` baru.
+   ⚠️ Pemilik proyek menahan pekerjaan Qwen 26 Okt 2026; jangan dilanjutkan
+   tanpa diminta.
+4. **`npm run beda:katalog`** — membandingkan katalog tool tetangga dengan
    rekaman terakhir. Katalog mereka bergeser dua kali dalam sehari pada 13 Okt
    dan dua-duanya ketemu secara kebetulan.
-2. **Tinjau 4 tool tulis mereka** yang menunggu: `tutup_tiket`, `tolak_tiket`,
-   `tugaskan_tiket`, `ubah_prioritas_tiket`. Tiga di antaranya di agent Ratu AI
-   Admin, dan `tugaskan_tiket` memberi kemampuan menugaskan pekerjaan ke
-   teknisi — beda sifat dari membatalkan tiket sendiri. **Perlu keputusan user.**
-3. **Model per asisten** — ⚠️ KOREKSI: ini sempat ditulis "terhalang karena
-   `ai_agent` tidak punya kolom model". Tidak terhalang: simpan di database
-   portal kita sendiri, pola yang sama sudah dipakai dua kali.
-4. **Operasi `tambah` di penjalan umum** — sekaligus memindahkan pembuatan
-   tiket dari kode khusus. Terhalang aturan pembangkit nomor tiket.
+5. **Tinjau 4 tool tulis mereka** yang menunggu: `tutup_tiket`, `tolak_tiket`,
+   `tugaskan_tiket`, `ubah_prioritas_tiket`. **Perlu keputusan user.**
+6. **Model per asisten** — tidak terhalang; simpan di database portal kita
+   sendiri, pola yang sama sudah dipakai dua kali.
+7. **`buat_tiket` pindah ke penjalan umum** — jalankan dua jalur berdampingan,
+   bandingkan rancangannya harus identik, baru cabut entri `DAFTAR`.
 
 ### Tertunda (belum dipatok)
 `tahapan_seleksi` untuk staf HR · kaitan `portal.pengguna` → `hr.karyawan`

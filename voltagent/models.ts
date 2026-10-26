@@ -23,7 +23,21 @@
  * `server` tidak membebani memori laptop -- itu yang bikin model lokal gagal
  * dimuat waktu RAM sesak.
  */
-export type Penyedia = "anthropic" | "lokal" | "server";
+/**
+ * `qwen` sengaja DIPISAH dari `server`, walau dua-duanya endpoint
+ * OpenAI-compatible.
+ *
+ * ⚠️ BUKAN KERAPIAN. `server` berarti "jalan di server kantor" — itu yang
+ * tertulis di dropdown, dan itu yang dipakai orang untuk memutuskan boleh
+ * tidaknya sebuah pertanyaan dikirim ke sana. Qwen 14B jalan di Google Colab
+ * lewat tunnel Cloudflare: alamat publik, pihak ketiga, di luar jaringan
+ * kantor. Menumpangkannya ke `server` membuat labelnya berbohong tentang ke
+ * mana data karyawan pergi.
+ *
+ * Konsekuensi teknisnya juga beda: `alamatBifrost()` menunjuk gateway kantor,
+ * sedangkan Qwen punya URL, kunci, dan timeout sendiri di `.env.local`.
+ */
+export type Penyedia = "anthropic" | "lokal" | "server" | "qwen";
 
 export type PilihanModel = {
   id: string;
@@ -51,11 +65,16 @@ export type PilihanModel = {
  * Penyedia yang tidak terdaftar di sini tidak akan muncul di mana-mana --
  * `npm run test:biaya` menjaganya.
  */
-export const URUTAN_PENYEDIA = ["anthropic", "server", "lokal"] as const;
+export const URUTAN_PENYEDIA = ["anthropic", "server", "qwen", "lokal"] as const;
 
 export const NAMA_PENYEDIA: Record<Penyedia, string> = {
   anthropic: "Claude (cloud)",
   server: "Lokal server kantor",
+  // ⚠️ TIDAK ditulis "lokal". Qwen 14B jalan di Google Colab lewat tunnel
+  // Cloudflare — pertanyaan dan hasil query perusahaan melewati pihak ketiga.
+  // Nama grup di dropdown adalah satu-satunya tempat pemakai bisa tahu itu
+  // sebelum menekan kirim.
+  qwen: "Qwen di Colab (luar kantor)",
   lokal: "Lokal (komputer ini)",
 };
 
@@ -125,6 +144,41 @@ export const MODEL_TERSEDIA: PilihanModel[] = [
     keterangan: "Lokal di server kantor — gratis & teliti, tapi 3x lebih lambat dari Claude",
     harga: null,
   },
+  {
+    /**
+     * Qwen2.5 14B Instruct, jalan di Google Colab, diakses lewat tunnel
+     * Cloudflare. Endpoint OpenAI-compatible, disetel pemilik proyek di
+     * `.env.local` (`QWEN_API_URL`, `QWEN_API_KEY`, `QWEN_MODEL`).
+     *
+     * ============================================================
+     * YANG SUDAH DIUJI (21 Okt 2026, langsung ke endpoint-nya)
+     * ============================================================
+     *   GET /v1/models                HTTP 200, 1,1 dtk
+     *   tanya biasa (bahasa Indonesia) HTTP 200, 2,3 dtk — jawabannya benar
+     *   tool calling                   HTTP 200, 3,5 dtk
+     *     -> memilih `asisten_tiket` DAN mengisi {"status":"OPEN"} sendiri,
+     *        `finish_reason: "tool_calls"`
+     *
+     * Itu jauh di atas qwen2.5 7B lokal (2/6 memanggil tool dengan benar).
+     *
+     * ⚠️ BELUM DIUKUR lewat agent sungguhan di portal ini — jadi belum ada
+     * angka untuk "berapa tool sebelum dia mulai mengarang". Karena itu ia
+     * TIDAK dibatasi satu tool seperti penyedia `lokal`: pembatasan itu
+     * diukur pada qwen2.5 7B, dan memindahkannya ke sini tanpa mengukur sama
+     * saja menebak. Keputusan yang sama pernah diambil untuk Gemma 12B.
+     *
+     * ⚠️ URL TUNNEL BERGANTI TIAP COLAB DIMULAI ULANG. `trycloudflare.com`
+     * memang quick tunnel. Kalau model ini tiba-tiba gagal, periksa
+     * `QWEN_API_URL` dulu sebelum mencurigai kode — `qwenHidup()` di bawah
+     * menerjemahkannya jadi pesan yang menyebut itu.
+     */
+    id: "Qwen/Qwen2.5-14B-Instruct",
+    label: "Qwen2.5 14B",
+    penyedia: "qwen",
+    keterangan:
+      "Google Colab T4 · Eksperimental — gratis & bisa pakai tool, tapi datanya keluar dari jaringan kantor",
+    harga: null,
+  },
   // ---------------------------------------------------------------
   // Model yang SENGAJA TIDAK didaftarkan, beserta alasannya.
   // Jangan tambahkan tanpa mengukur ulang.
@@ -182,6 +236,95 @@ export function alamatOllama(): string {
 /** Alamat gateway model server kantor. */
 export function alamatBifrost(): string {
   return process.env.BIFROST_URL ?? "";
+}
+
+/** Alamat endpoint Qwen di Colab. Kosong kalau belum disetel. */
+export function alamatQwen(): string {
+  return process.env.QWEN_API_URL ?? "";
+}
+
+/**
+ * Apakah Qwen BOLEH dan BISA dipakai — dari setelan saja, tanpa menyentuh
+ * jaringan.
+ *
+ * ⚠️ BEDA DARI `qwenHidup()`, dan keduanya perlu. Yang ini menjawab "sudah
+ * disetel belum"; yang itu menjawab "Colab-nya sedang hidup atau tidak".
+ * Menggabungkannya berarti dropdown harus menunggu panggilan jaringan cuma
+ * untuk tahu apakah sebuah pilihan pantas ditampilkan.
+ *
+ * ⚠️ HTTPS DIWAJIBKAN. Endpoint ini di luar jaringan kantor dan memakai
+ * Bearer key; lewat `http://` kunci itu terkirim polos. Alamat yang bukan
+ * HTTPS diperlakukan sebagai belum disetel — bukan dipakai sambil diberi
+ * peringatan, karena peringatan tidak menghentikan apa pun.
+ *
+ * `localhost` dikecualikan supaya pengembangan dengan server di komputer
+ * sendiri tetap bisa jalan.
+ */
+export function qwenDisetel(): boolean {
+  if (process.env.QWEN_ENABLED === "false") return false;
+  const url = alamatQwen();
+  if (!url || !process.env.QWEN_API_KEY) return false;
+  try {
+    const u = new URL(url);
+    return u.protocol === "https:" || u.hostname === "localhost" || u.hostname === "127.0.0.1";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Model yang pantas ditawarkan ke pemakai saat ini.
+ *
+ * `MODEL_TERSEDIA` sengaja TETAP memuat semuanya: `labelModel()` dan
+ * perhitungan biaya membacanya untuk jawaban LAMA, dan jawaban yang dibuat
+ * waktu sebuah model masih aktif tidak boleh kehilangan namanya hanya karena
+ * model itu kini dimatikan.
+ */
+export function modelDitawarkan(): PilihanModel[] {
+  return MODEL_TERSEDIA.filter((m) => m.penyedia !== "qwen" || qwenDisetel());
+}
+
+/**
+ * Batas waktu Qwen, dari `QWEN_TIMEOUT_MS`.
+ *
+ * Bawaannya 180 detik, jauh lebih longgar daripada model lain: Colab bisa
+ * sedang memuat bobotnya, dan tunnel Cloudflare menambah satu lompatan lagi.
+ * Angka yang terlalu ketat membuat permintaan yang sebenarnya akan berhasil
+ * terpotong di tengah — dan gejalanya terlihat seperti model yang rusak.
+ */
+export function timeoutQwen(): number {
+  const n = Number(process.env.QWEN_TIMEOUT_MS);
+  return Number.isFinite(n) && n > 0 ? n : 180_000;
+}
+
+/**
+ * Cek apakah endpoint Qwen menjawab.
+ *
+ * ⚠️ ADA KARENA URL-NYA MEMANG BERUBAH-UBAH. `trycloudflare.com` quick tunnel
+ * memberi alamat acak baru tiap kali dijalankan, jadi `QWEN_API_URL` di
+ * `.env.local` menjadi usang setiap Colab dimulai ulang — bukan kasus langka,
+ * tapi kejadian rutin.
+ *
+ * Tanpa pemeriksaan ini pemakai cuma melihat "fetch failed" dan menyangka
+ * portalnya rusak. Pola dan alasannya sama persis dengan `ollamaHidup()`.
+ *
+ * Timeout 5 detik: lebih longgar dari Ollama (yang di localhost) karena ini
+ * melewati internet, tapi tetap cukup pendek supaya pemakai tidak menunggu
+ * lama hanya untuk diberi tahu bahwa modelnya tidak ada. `/health` di sisi
+ * Colab tidak menjalankan inferensi, jadi pemeriksaan ini tidak memakai GPU.
+ */
+export async function qwenHidup(): Promise<boolean> {
+  const url = alamatQwen();
+  if (!url) return false;
+  try {
+    const r = await fetch(`${url}/models`, {
+      headers: { Authorization: `Bearer ${process.env.QWEN_API_KEY ?? ""}` },
+      signal: AbortSignal.timeout(5_000),
+    });
+    return r.ok;
+  } catch {
+    return false;
+  }
 }
 
 /**

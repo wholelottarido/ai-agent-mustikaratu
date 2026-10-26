@@ -27,6 +27,7 @@
  */
 import { createHash } from "node:crypto";
 import { poolPerusahaan } from "../db-perusahaan";
+import { cocokkan, pilihanRelasi, rapat, type Pilihan } from "./pilihan";
 
 /** Kode tool di `ai_tool`. Satu-satunya nama yang ditulis tetap di sini. */
 export const KODE_TOOL = "buat_tiket";
@@ -39,7 +40,8 @@ export type Permintaan = {
   prioritas?: string;
 };
 
-export type Pilihan = { nilai: string; label: string };
+// `Pilihan` sekarang milik `pilihan.ts`; diekspor ulang supaya pemanggil lama tetap jalan.
+export type { Pilihan } from "./pilihan";
 
 export type Masalah =
   | { jenis: "kurang"; kolom: string; label: string }
@@ -106,67 +108,14 @@ export async function konfigTiket(): Promise<KonfigTiket | null> {
   return { isian: r.kolom_isian ?? [], tabelTarget: r.tabel_target, aktif: r.is_active };
 }
 
-/** Samakan bentuk teks sebelum dibandingkan: beda spasi & huruf besar bukan beda maksud. */
-function rapat(s: string): string {
-  return s.trim().toLowerCase().replace(/\s+/g, " ");
-}
-
 /**
- * Cocokkan yang diketik user dengan daftar pilihan.
+ * ⚠️ `rapat`, `cocokkan`, dan `pilihanRelasi` PINDAH ke `pilihan.ts`
+ * (21 Okt 2026) supaya penjalan tulis umum memakai yang sama persis.
  *
- * Dicoba persis dulu, baru penggalan. ⚠️ Yang cocok sebagian hanya diterima
- * kalau HANYA SATU yang cocok — "printer" yang cocok dengan dua sub-kategori
- * tidak boleh dipilihkan diam-diam, karena tiket yang masuk ke antrean salah
- * akan dikerjakan orang yang salah.
- *
- * ⚠️ HANYA SATU ARAH: label yang memuat ketikan user, BUKAN sebaliknya.
- *
- * Arah sebaliknya ("ketikan user memuat label") sempat ada, dan ia menerima
- * `"SANGAT MENDESAK SEKALI"` sebagai Mendesak. Kedengarannya membantu — sampai
- * disadari kalimat `"tidak mendesak"` juga memuat kata "mendesak", dan akan
- * dipetakan ke URGENT: kebalikan dari maksudnya, tanpa satu pun pesan galat.
- *
- * Tidak ada cara memisahkan keduanya tanpa benar-benar memahami kalimatnya.
- * Jadi frasa panjang dipulangkan sebagai daftar pilihan, dan model memilih
- * dari daftar itu — gagal yang terlihat, bukan tebakan yang diam.
+ * Logikanya tidak berubah sedikit pun — termasuk aturan satu-arah pada
+ * `cocokkan()` yang menolak "tidak mendesak" jadi URGENT. Catatan panjangnya
+ * ikut pindah ke sana; baca dulu sebelum mengubahnya.
  */
-function cocokkan(diberi: string, daftar: Pilihan[]): Pilihan | Pilihan[] {
-  const q = rapat(diberi);
-  const persis = daftar.filter((p) => rapat(p.label) === q);
-  if (persis.length === 1) return persis[0];
-  const penggalan = daftar.filter((p) => rapat(p.label).includes(q));
-  if (penggalan.length === 1) return penggalan[0];
-  return penggalan.length > 0 ? penggalan : daftar;
-}
-
-async function pilihanRelasi(i: Isian, indukNilai?: string): Promise<Pilihan[]> {
-  const p = i.pilihan;
-  if (!p?.tabel || !p.kolom_nilai || !p.kolom_label) return [];
-  // Nama tabel & kolom datang dari konfigurasi, bukan dari user, tapi tetap
-  // disaring: satu baris konfigurasi yang salah tidak boleh jadi SQL bebas.
-  const aman = (s: string) => {
-    if (!/^[a-z_][a-z0-9_]*$/i.test(s)) throw new Error(`nama tidak sah: ${s}`);
-    return `"${s}"`;
-  };
-  const syarat: string[] = [];
-  const nilai: unknown[] = [];
-  for (const s of p.saring_tetap ?? []) {
-    nilai.push(s.nilai);
-    syarat.push(`${aman(s.kolom)} = $${nilai.length}`);
-  }
-  if (p.induk && indukNilai) {
-    nilai.push(indukNilai);
-    syarat.push(`${aman(p.induk.kolom_relasi)} = $${nilai.length}`);
-  }
-  const { rows } = await poolPerusahaan().query<{ nilai: string; label: string }>(
-    `SELECT ${aman(p.kolom_nilai)}::text AS nilai, ${aman(p.kolom_label)}::text AS label
-       FROM ${aman(p.tabel)}
-      ${syarat.length ? `WHERE ${syarat.join(" AND ")}` : ""}
-      ORDER BY 2`,
-    nilai,
-  );
-  return rows;
-}
 
 /**
  * Susun rancangan tiket.
@@ -215,7 +164,7 @@ export async function susunDraf(idEmployee: string | null, minta: Permintaan): P
   let kategori: Pilihan | undefined;
   const iKat = cari("id_category");
   if (iKat) {
-    const daftar = await pilihanRelasi(iKat);
+    const daftar = await pilihanRelasi(iKat.pilihan!);
     const v = (diminta.id_category ?? "").trim();
     if (!v) {
       if (iKat.wajib) masalah.push({ jenis: "kurang", kolom: "id_category", label: iKat.label });
@@ -241,7 +190,7 @@ export async function susunDraf(idEmployee: string | null, minta: Permintaan): P
         masalah.push({ jenis: "kurang", kolom: "id_sub_category", label: iSub.label });
       }
     } else {
-      const daftar = await pilihanRelasi(iSub, kategori.nilai);
+      const daftar = await pilihanRelasi(iSub.pilihan!, kategori.nilai);
       if (!v) {
         if (iSub.wajib) masalah.push({ jenis: "kurang", kolom: "id_sub_category", label: iSub.label });
       } else {

@@ -26,7 +26,11 @@ import { buatToolDokumen } from "./tools-dokumen";
 import { MAX_ROWS } from "./db";
 import { createOllama } from "ollama-ai-provider-v2";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import { alamatOllama, alamatBifrost, ambilModel, MODEL_DEFAULT, NUM_CTX_LOKAL } from "./models";
+import { simulateStreamingMiddleware, wrapLanguageModel } from "ai";
+import {
+  alamatOllama, alamatBifrost, alamatQwen, timeoutQwen,
+  ambilModel, MODEL_DEFAULT, NUM_CTX_LOKAL,
+} from "./models";
 import { SEMUA_DEPARTEMEN, type KonfigDepartemen } from "./departemen";
 
 /** Kunci context tempat route menaruh pilihan model user. */
@@ -663,6 +667,30 @@ const bifrost = createOpenAICompatible({
 });
 
 /**
+ * Qwen 14B di Google Colab, lewat tunnel Cloudflare.
+ *
+ * Endpoint-nya OpenAI-compatible, jadi memakai klien yang sama dengan
+ * Bifrost — tapi instance TERPISAH, karena URL, kunci, dan batas waktunya
+ * sendiri. Menumpang `bifrost` berarti satu `.env` yang salah menyeret
+ * dua-duanya.
+ */
+const qwen = createOpenAICompatible({
+  name: "qwen-colab",
+  baseURL: alamatQwen(),
+  apiKey: process.env.QWEN_API_KEY,
+  /**
+   * ⚠️ Batas waktu dipasang DI SINI, bukan di pemanggil.
+   *
+   * Alasannya sama dengan `num_ctx` pada Ollama di atas: kalau ditaruh di
+   * `streamText()`, tiap pemanggil harus ingat menambahkannya, dan yang lupa
+   * tidak dapat galat — cuma permintaan yang terpotong di tengah waktu Colab
+   * sedang memuat bobotnya.
+   */
+  fetch: (url, init) =>
+    fetch(url, { ...init, signal: init?.signal ?? AbortSignal.timeout(timeoutQwen()) }),
+});
+
+/**
  * Pilih model sesuai penyedianya.
  *
  * `kandidat` berasal dari browser, jadi selalu lewat `ambilModel()` yang
@@ -672,6 +700,34 @@ export function pilihModel(kandidat: unknown) {
   const m = ambilModel(kandidat ?? MODEL_DEFAULT);
   if (m.penyedia === "lokal") return ollama(m.id);
   if (m.penyedia === "server") return bifrost(m.id);
+  /**
+   * ⚠️ QWEN DI COLAB TIDAK MENDUKUNG STREAMING — dan gagalnya keras.
+   *
+   * Diuji 21 Okt 2026 lewat portal: permintaan dengan `stream: true` dibalas
+   *
+   *     HTTP 400  {"detail":"Streaming unsupported"}
+   *
+   * Seluruh portal memanggil `streamText()`, jadi tanpa pembungkus ini model
+   * itu TIDAK PERNAH bisa menjawab satu pertanyaan pun.
+   *
+   * `simulateStreamingMiddleware` memanggil `doGenerate` (non-streaming) lalu
+   * memancarkan hasilnya sebagai satu potongan. Kontrak ke pemanggil tidak
+   * berubah sama sekali — `streamText()`, metadata token, kartu konfirmasi,
+   * dan riwayat percakapan tetap lewat jalur yang sama.
+   *
+   * ⚠️ AKIBAT SAMPINGAN YANG PENTING: untuk model ini jawaban utuh sudah ada
+   * di server SEBELUM sepotong pun sampai ke browser. Itu persis yang
+   * dibutuhkan penahan jawaban palsu versi server-side — tidak perlu menahan
+   * stream secara khusus, karena di jalur ini memang tidak ada stream.
+   *
+   * Penyedia lain TIDAK disentuh: Claude dan Bifrost tetap streaming asli.
+   */
+  if (m.penyedia === "qwen") {
+    return wrapLanguageModel({
+      model: qwen(m.id),
+      middleware: simulateStreamingMiddleware(),
+    });
+  }
   return anthropic(m.id);
 }
 

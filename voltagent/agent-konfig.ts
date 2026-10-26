@@ -154,8 +154,100 @@ export type HasilRakit = {
  *
  * Dibuat ulang tiap request. Lihat peringatan cache di kepala berkas.
  */
-export function buatAgentDariKonfig(k: KonfigAgent, sesi: SesiPemakai, catat?: CatatSumber, catatRancangan?: CatatRancangan): HasilRakit {
-  const { tool, dilewati } = buatToolDariKonfig(k.tool, sesi, catat, catatRancangan);
+/**
+ * Berapa tool yang boleh dipegang model LOKAL di jalur ini.
+ *
+ * ============================================================
+ * ⚠️ ANGKA INI SETENGAH TERUKUR, DAN ITU HARUS DIKETAHUI
+ * ============================================================
+ * Yang TERUKUR (24 Sep 2026, lewat agent sungguhan di jalur LAMA):
+ * qwen2.5:7b benar 10/12 dengan SATU tool, 2/6 dengan DUA. Di atas dua tool
+ * ia berhenti memanggil tool sama sekali dan mulai menulis jawaban yang
+ * bentuknya meyakinkan tanpa menyentuh database.
+ *
+ * Yang BELUM terukur: berapa angka yang benar untuk JALUR INI. Tool-nya
+ * berbeda, instruksinya berbeda, dan ada perute + `delegate_task` di depannya
+ * — jadi memindahkan angka "1" ke sini adalah pemindahan, bukan pengukuran.
+ *
+ * Bawaannya 1 karena itu satu-satunya nilai yang pernah terbukti. Naikkan
+ * lewat `MAKS_TOOL_LOKAL` di `.env.local`, lalu UKUR — menaikkannya tanpa
+ * mengukur sama saja menebak, dan kegagalannya tidak menimbulkan galat apa
+ * pun: jawabannya cuma mulai salah sambil tetap terlihat wajar.
+ *
+ * Diukur 21 Okt 2026 (`npm run ukur:qwen`): tanpa pembatas ini model lokal
+ * menerima 34 tool (akun dafi) sampai 127 tool (akun ridho, super admin).
+ */
+export function maksToolLokal(): number {
+  const n = Number(process.env.MAKS_TOOL_LOKAL);
+  return Number.isInteger(n) && n > 0 ? n : 1;
+}
+
+/**
+ * Memangkas daftar tool ke `maks`, dengan URUTAN YANG DITENTUKAN.
+ *
+ * ⚠️ BUKAN "ambil yang pertama ketemu". Urutan kedatangan ditentukan isi tabel
+ * `ai_tool` milik tim lain, yang berubah tanpa pemberitahuan — 263 dari 280
+ * barisnya pernah lahir dalam satu hari. Pemangkasan yang mengikuti urutan itu
+ * akan memberi model lokal tool yang berbeda-beda tiap kali katalog sebelah
+ * bergerak, dan tidak ada yang tahu kapan.
+ *
+ * Jebakan yang sama sudah menggigit di `targetTulis()` (13 Okt 2026): borang
+ * memakai sumber "yang pertama ketemu", lalu tim lain menambah satu sumber dan
+ * borangnya mulai menawarkan pilihan yang mustahil.
+ *
+ * Urutannya: tool MILIK KITA dulu (sudah ditinjau), lalu urut kode.
+ */
+function pangkasTool(
+  daftar: KonfigAgent["tool"],
+  terpasang: ReturnType<typeof buatToolDariKonfig>["tool"],
+  maks: number,
+): { tool: typeof terpasang; dibuang: string[] } {
+  if (terpasang.length <= maks) return { tool: terpasang, dibuang: [] };
+
+  const urut = [...daftar].sort(
+    (a, b) =>
+      Number(b.pemilik === "magang") - Number(a.pemilik === "magang") ||
+      a.kode.localeCompare(b.kode),
+  );
+  const pilih: typeof terpasang = [];
+  const dibuang: string[] = [];
+  for (const k of urut) {
+    const t = terpasang.find((x) => x.name === namaUntukModel(k));
+    if (!t) continue;
+    if (pilih.length < maks) pilih.push(t);
+    else dibuang.push(k.kode);
+  }
+  return { tool: pilih, dibuang };
+}
+
+export function buatAgentDariKonfig(
+  k: KonfigAgent,
+  sesi: SesiPemakai,
+  catat?: CatatSumber,
+  catatRancangan?: CatatRancangan,
+  /**
+   * Batas jumlah tool. Diisi hanya untuk model lokal — lihat
+   * `maksToolLokal()`. `undefined` berarti tanpa batas, seperti sebelumnya.
+   */
+  maks?: number,
+): HasilRakit {
+  const rakit = buatToolDariKonfig(k.tool, sesi, catat, catatRancangan);
+  const dilewati = rakit.dilewati;
+  let tool = rakit.tool;
+
+  if (maks !== undefined) {
+    const p = pangkasTool(k.tool, tool, maks);
+    tool = p.tool;
+    // ⚠️ Yang dibuang MASUK KE `dilewati`, bukan hilang diam-diam. Tool yang
+    // menghilang tanpa alasan membuat administrator mengira setelannya rusak
+    // — dan di sini yang membuangnya justru keputusan yang disengaja.
+    for (const kode of p.dibuang) {
+      dilewati.push({
+        kode,
+        sebab: `dipangkas: model lokal dibatasi ${maks} tool di agent ini (setel MAKS_TOOL_LOKAL untuk mengubah)`,
+      });
+    }
+  }
 
   // Tool yang BISA dirakit -- bukan semua tool yang terdaftar. Instruksi yang
   // menyebut tool yang tidak terpasang membuat model memanggil nama yang tidak
@@ -211,7 +303,14 @@ export type HasilRouter = {
  * bawahan — dia masih bisa menjelaskan keadaan itu, dan itu lebih baik
  * daripada layar yang diam.
  */
-export async function buatRouter(sesi: SesiPemakai, aksesApps: string[], catat?: CatatSumber, catatRancangan?: CatatRancangan): Promise<HasilRouter | undefined> {
+export async function buatRouter(
+  sesi: SesiPemakai,
+  aksesApps: string[],
+  catat?: CatatSumber,
+  catatRancangan?: CatatRancangan,
+  /** Batas tool per agent bawahan. Diisi hanya untuk model lokal. */
+  maks?: number,
+): Promise<HasilRouter | undefined> {
   const konf = await muatKonfig();
   const umum = konf.agent.find((a) => a.umum && a.aktif);
   if (!umum) return undefined;
@@ -226,11 +325,15 @@ export async function buatRouter(sesi: SesiPemakai, aksesApps: string[], catat?:
     const dipegang = [a.idApps, ...a.appsLain].filter(Boolean) as string[];
     if (!dipegang.some((id) => boleh.has(id))) continue;
 
-    const r = buatAgentDariKonfig(a, sesi, catat, catatRancangan);
+    const r = buatAgentDariKonfig(a, sesi, catat, catatRancangan, maks);
     anak.push(r.agent);
     // Nama tool yang BENAR-BENAR terpasang, bukan semua yang terdaftar.
     const bisa = a.tool.filter((t) => r.tool.some((x) => x.name === namaUntukModel(t))).map((t) => t.nama);
-    bawahan.push({ kode: a.kode, nama: a.nama, jumlahTool: a.tool.length, bisa });
+    // ⚠️ Yang dilaporkan jumlah tool YANG TERPASANG, bukan yang terdaftar di
+    // setelan. Dulu keduanya hampir sama; sejak ada pemangkasan model lokal,
+    // memakai `a.tool.length` akan melaporkan 34 untuk agent yang sebenarnya
+    // cuma memegang 1 — dan angka itu dipakai log serta `npm run ukur:qwen`.
+    bawahan.push({ kode: a.kode, nama: a.nama, jumlahTool: r.tool.length, bisa });
     dilewati.push(...r.dilewati);
   }
 
@@ -272,14 +375,22 @@ ${daftar}
 1. Pertanyaan tentang data — tiket, aset, cuti, program, kunjungan, order,
    laporan — SELALU diteruskan ke agent yang memegang aplikasinya. Jangan
    dijawab sendiri walau kamu merasa tahu jawabannya.
-2. Satu pertanyaan boleh menyentuh dua aplikasi. Mintakan ke dua-duanya, lalu
+2. Pertanyaan PROSEDUR juga SELALU diteruskan: "bagaimana cara...", "apa
+   syaratnya", "berapa lama prosesnya", "siapa yang menyetujui". Agent
+   aplikasi punya alat pencari SOP; kamu tidak punya alat apa pun. Kamu TIDAK
+   BISA tahu sebuah prosedur ada atau tidak tanpa bertanya ke mereka — jadi
+   jangan menyimpulkannya sendiri.
+3. Satu pertanyaan boleh menyentuh dua aplikasi. Mintakan ke dua-duanya, lalu
    gabungkan jawabannya.
-3. Kalau tidak ada agent yang cocok, katakan terus terang aplikasi itu belum
+4. Kalau tidak ada agent yang cocok, katakan terus terang aplikasi itu belum
    punya asisten atau belum terbuka untuk akun ini, dan sarankan meminta akses
    ke administrator aplikasinya. Jangan mengarang jawaban sebagai gantinya.
-4. Sebutkan agent mana yang menjawab, supaya penanya tahu harus bertanya ke
+   ⚠️ Aturan ini berlaku SESUDAH kamu bertanya, bukan sebagai ganti bertanya.
+   Untuk pertanyaan prosedur, "tidak ada yang cocok" baru boleh disimpulkan
+   kalau agent yang kamu mintai sudah menjawab bahwa dokumennya tidak ada.
+5. Sebutkan agent mana yang menjawab, supaya penanya tahu harus bertanya ke
    mana lain kali.
-5. Jawab dalam bahasa Indonesia, ringkas.`,
+6. Jawab dalam bahasa Indonesia, ringkas.`,
     subAgents: anak,
     maxSteps: MAKS_LANGKAH,
   });

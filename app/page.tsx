@@ -6,6 +6,7 @@ import { RailAgent } from "./components/rail-agent";
 import { bacaToken, NAMA_COOKIE } from "@/lib/sesi";
 import { daftarAgent, type DaftarAgent } from "@/lib/daftar-agent";
 import { ambilDepartemen } from "@/voltagent";
+import { modelDitawarkan } from "@/voltagent/models";
 
 export default async function Home() {
   // proxy.ts sudah menjaga halaman ini, tapi sesi tetap dibaca lagi di sini --
@@ -40,6 +41,9 @@ export default async function Home() {
               departemen={dep.label}
               contoh={agent.siap && agent.contoh.length > 0 ? agent.contoh : dep.contohPertanyaan}
               agent={agent.siap ? agent.agent : undefined}
+              // Dihitung di SERVER: ketersediaan Qwen bergantung pada env
+              // yang tidak boleh sampai ke peramban.
+              modelDitawarkan={modelDitawarkan()}
             />
           </div>
         </div>

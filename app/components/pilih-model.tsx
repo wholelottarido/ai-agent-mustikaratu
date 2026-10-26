@@ -28,17 +28,29 @@ const URUTAN = URUTAN_PENYEDIA;
 export function PilihModel({
   nilai,
   onPilih,
+  daftar = MODEL_TERSEDIA,
 }: {
   nilai: string;
   onPilih: (id: string) => void;
+  /**
+   * Model yang pantas ditawarkan. Datang dari SERVER — ketersediaan Qwen
+   * bergantung pada `QWEN_API_URL`/`QWEN_API_KEY`, dan komponen klien tidak
+   * boleh (dan tidak bisa) membaca itu.
+   *
+   * Bawaannya seluruh whitelist supaya pemanggil lama tidak ikut berubah.
+   */
+  daftar?: PilihanModel[];
 }) {
   const [buka, setBuka] = useState(false);
   const [sorot, setSorot] = useState(0);
   const kotak = useRef<HTMLDivElement>(null);
 
-  const terpilih = MODEL_TERSEDIA.find((m) => m.id === nilai) ?? MODEL_TERSEDIA[0];
+  // ⚠️ Dicari di SELURUH whitelist, bukan di `daftar`. Jawaban lama bisa
+  // memakai model yang kini tidak ditawarkan lagi, dan namanya tetap harus
+  // terbaca — kalau tidak, pemilihnya tiba-tiba menampilkan model lain.
+  const terpilih = MODEL_TERSEDIA.find((m) => m.id === nilai) ?? daftar[0] ?? MODEL_TERSEDIA[0];
   // Daftar rata untuk navigasi panah -- grup cuma pembatas visual.
-  const rata = URUTAN.flatMap((g) => MODEL_TERSEDIA.filter((m) => m.penyedia === g));
+  const rata = URUTAN.flatMap((g) => daftar.filter((m) => m.penyedia === g));
 
   // Tutup kalau diklik di luar. Tanpa ini menu menggantung waktu user
   // mengetik di kolom pertanyaan.
@@ -112,7 +124,7 @@ export function PilihModel({
           className="absolute bottom-full left-0 z-20 mb-1.5 w-72 overflow-hidden rounded-2xl bg-permukaan shadow-besar ring-1 ring-garis/60"
         >
           {URUTAN.map((grup) => {
-            const isi = MODEL_TERSEDIA.filter((m) => m.penyedia === grup);
+            const isi = daftar.filter((m) => m.penyedia === grup);
             if (isi.length === 0) return null;
 
             return (

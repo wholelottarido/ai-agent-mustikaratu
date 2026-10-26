@@ -98,7 +98,13 @@
     "test:tulis-umum": "tsx --env-file=.env.local scripts/test-tulis-umum.mts",
     "test:penjaga": "tsx scripts/test-penjaga-route.mts",
     "test:tool-tulis": "tsx --env-file=.env.local scripts/test-tool-tulis-baru.mts",
-    "test:tulis-setuju": "tsx --env-file=.env.local scripts/test-tulis-disetujui.mts"
+    "test:tulis-setuju": "tsx --env-file=.env.local scripts/test-tulis-disetujui.mts",
+    "test:tulis-tambah": "tsx --env-file=.env.local scripts/test-tulis-tambah.mts",
+    "ukur:qwen": "tsx --env-file=.env.local scripts/ukur-qwen-web.mts",
+    "test:lokal-jalur": "tsx --env-file=.env.local scripts/test-model-lokal-jalur.mts",
+    "test:qwen-tool": "tsx --env-file=.env.local scripts/test-qwen-tool.mts",
+    "test:qwen-setelan": "tsx scripts/test-qwen-setelan.mts",
+    "test:perute": "tsx --env-file=.env.local scripts/test-perute-konfig.mts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.120",

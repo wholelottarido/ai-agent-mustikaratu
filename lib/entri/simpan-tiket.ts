@@ -27,6 +27,7 @@
  * ditugaskan — dijamin nilai bawaan kolomnya, bukan oleh kode kita.
  */
 import { Pool } from "pg";
+import { nomorBerikutnya } from "./pembangkit";
 import { sidikDraf, susunDraf, type Draf, type Masalah, type Permintaan } from "./tiket";
 import {
   susunDrafUbah, sidikDrafUbah,
@@ -74,61 +75,17 @@ export type HasilSimpan =
   | { ok: true; idTicket: string; noTicket: string; draf: Draf }
   | { ok: false; sebab: "draf-berubah" | "tidak-sah" | "gagal"; pesan: string; masalah?: Masalah[] };
 
-/** Penghitung nomor tiket: 4 digit, melingkar. */
-const URUT_MIN = 1000;
-const URUT_MAKS = 9999;
-
 /**
- * Nomor tiket berikutnya: `T` + tanggal hari ini + penghitung 4 digit.
+ * ⚠️ `nomorBerikutnya` PINDAH ke `pembangkit.ts` (21 Okt 2026), dan diekspor
+ * ulang dari sini supaya pemanggil lama tidak ikut berubah.
  *
- * ⚠️ PENGHITUNGNYA MELINGKAR, DAN SAYA PERNAH SALAH MEMBACANYA.
- *
- * Tebakan pertama: penghitung global yang naik terus, jadi `max()` seluruh
- * tabel + 1. Itu menghasilkan `T2026100810000` — LIMA digit, satu-satunya
- * nomor sepanjang 14 huruf di antara 10.089 nomor sepanjang 13.
- *
- * Yang sebenarnya, dibaca dari sebarannya per tahun:
- *
- *     2024: 7242 .. 8655      2025: 8656 .. 9522
- *     2026: 1000 .. 9999      <- menyentuh 9999 lalu BALIK ke 1000
- *
- * Jadi yang dipakai bukan nilai terbesar di seluruh tabel, melainkan
- * penghitung milik tiket TERBARU, ditambah satu, dan melingkar di 9999.
- *
- * ⚠️ Balik ke 1000 (bukan 1) adalah pembacaan dari data, bukan aturan yang
- * pernah diberi tahu tim pemiliknya. Kalau ternyata keliru, akibatnya
- * tabrakan nomor — dan itu GAGAL KERAS karena `no_ticket` bertipe `UNIQUE`,
- * bukan diam-diam menggandakan.
- *
- * `lewati` dipakai saat mencoba ulang: tanpa itu, percobaan kedua menghitung
- * nomor yang sama persis dan bertabrakan lagi.
+ * Sebabnya: operasi `tambah` lewat penjalan umum membutuhkannya juga, dan
+ * penjalan umum tidak punya alasan bergantung pada berkas khusus tiket.
+ * Aturan nomornya sendiri tidak berubah sedikit pun — lihat catatan panjang
+ * di `pembangkit.ts` soal penghitung yang melingkar di 9999.
  */
-export async function nomorBerikutnya(db: Pool, lewati = 0): Promise<string> {
-  const { rows } = await db.query<{ urut: number | null }>(
-    `SELECT substring(no_ticket from 10)::int AS urut
-       FROM portal_ticket
-      WHERE no_ticket ~ '^T[0-9]{12}$'
-      ORDER BY created_at DESC
-      LIMIT 1`,
-  );
-  const sekarang = rows[0]?.urut ?? URUT_MIN - 1;
-  const jangkauan = URUT_MAKS - URUT_MIN + 1;
-  const urut = URUT_MIN + ((sekarang - URUT_MIN + 1 + lewati) % jangkauan + jangkauan) % jangkauan;
+export { nomorBerikutnya } from "./pembangkit";
 
-  const t = new Date();
-  const tanggal =
-    `${t.getFullYear()}${String(t.getMonth() + 1).padStart(2, "0")}${String(t.getDate()).padStart(2, "0")}`;
-  return `T${tanggal}${String(urut).padStart(4, "0")}`;
-}
-
-/**
- * Kolom yang diisi, dan SATU-SATUNYA daftar yang dipakai merakit INSERT.
- *
- * Ditulis tetap di sini, bukan dibaca konfigurasi, dan itu disengaja: hak
- * INSERT role database dibentuk dari daftar yang sama. Keduanya harus bergerak
- * bersama, dan menaruhnya di dua tempat yang bisa berbeda justru membuat salah
- * satunya diam-diam lebih longgar.
- */
 export const KOLOM_ISI = [
   "no_ticket", "id_employee", "id_category", "id_sub_category",
   "subject", "description", "priority",

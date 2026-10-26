@@ -277,7 +277,6 @@ export function tulisPerluPersetujuan(t: {
     isian: t.isian, otomatis: t.otomatis, kunci: t.kunci, syarat: t.syarat,
   });
   if (!baca.ok) return false;
-  if (baca.konfig.operasi === "tambah") return false; // jalurnya sendiri, belum ada penjalan umum
   return true;
 }
 
@@ -308,15 +307,23 @@ function buatToolUmum(t: KonfigTool, sesi: SesiPemakai, catat?: CatatRancangan) 
   });
   if (!baca.ok) return null;
   const k = baca.konfig;
-  if (k.operasi === "tambah") return null; // jalurnya sendiri, lihat buatToolTiket
-
+  // ⚠️ `buat_tiket` TIDAK sampai ke sini — ia punya entri di `DAFTAR`, jadi
+  // `buatToolTulis()` memilih `buatToolTiket` lebih dulu. Yang lewat sini cuma
+  // baris `tambah` yang tidak punya penjalan khusus, mis. yang dibuat tim IT
+  // sendiri dari layar Kelola AI (21 Okt 2026).
   const bentuk: Record<string, z.ZodTypeAny> = {};
   for (const kc of k.kunci) {
     bentuk[kc.kolom] = z.string().describe(kc.label ?? kc.kolom);
   }
   for (const i of k.isian) {
-    const opsi = i.pilihan?.opsi ?? [];
-    const ket = opsi.length > 0 ? `${i.label}. Pilihan: ${opsi.map((o) => o.label).join(", ")}` : i.label;
+    // ⚠️ Pilihan RELASI tidak disebutkan isinya di keterangan parameter.
+    // Daftarnya datang dari tabel lain, bisa ratusan baris, dan isinya berubah
+    // tanpa tool-nya dirakit ulang. Model mengirim apa yang dikatakan user;
+    // `susunDrafTambah` yang mencocokkannya, dan kalau meleset ia memulangkan
+    // daftar pilihan yang sah sebagai `perlu-perbaikan`.
+    const opsi = i.pilihan?.jenis === "tetap" ? (i.pilihan.opsi ?? []) : [];
+    let ket = opsi.length > 0 ? `${i.label}. Pilihan: ${opsi.map((o) => o.label).join(", ")}` : i.label;
+    if (i.pilihan?.jenis === "relasi") ket = `${i.label}. Isi apa adanya dari kata user; nanti dicocokkan.`;
     bentuk[i.kolom] = i.wajib ? z.string().describe(ket) : z.string().optional().describe(ket);
   }
   // Nilai otomatis TIDAK jadi parameter: ia datang dari konfigurasi, bukan
@@ -336,8 +343,15 @@ function buatToolUmum(t: KonfigTool, sesi: SesiPemakai, catat?: CatatRancangan) 
     // (terjadi 8 Okt 2026). `nama` jauh lebih bersih, jadi itu yang memimpin.
     description:
       `${t.nama}, untuk data milik penanya sendiri. ` +
-      `Butuh ${k.kunci.map((x) => x.label ?? x.kolom).join(" dan ")} dari user — ` +
-      `kalau tidak disebut, tanyakan dulu.` +
+      // ⚠️ `tambah` tidak punya kunci, dan kalimat "Butuh  dari user" dengan
+      // daftar kosong di tengahnya pernah membuat model menanyakan sesuatu
+      // yang tidak ada namanya. Yang wajib disebut untuk `tambah` adalah
+      // isiannya.
+      (k.operasi === "tambah"
+        ? `Wajib: ${k.isian.filter((x) => x.wajib).map((x) => x.label).join(", ") || "(tidak ada)"} — ` +
+          `kalau belum disebut user, tanyakan dulu.`
+        : `Butuh ${k.kunci.map((x) => x.label ?? x.kolom).join(" dan ")} dari user — ` +
+          `kalau tidak disebut, tanyakan dulu.`) +
       (tetap.length > 0 ? ` ${tetap.join("; ")}.` : "") +
       ` ⚠️ TOOL INI TIDAK MENYIMPAN APA PUN — hasilnya rancangan yang ditampilkan ` +
       `beserta tombol konfirmasi, dan tombol itu yang menyimpan. JANGAN katakan ` +
@@ -361,7 +375,11 @@ function buatToolUmum(t: KonfigTool, sesi: SesiPemakai, catat?: CatatRancangan) 
         draf: h.draf,
         sidik,
         permintaan: masukan,
-        catatan: "BELUM TERSIMPAN. Perubahan baru berlaku setelah user menekan tombol Simpan.",
+        catatan:
+          k.operasi === "tambah"
+            ? "BELUM TERSIMPAN. Barisnya baru ada setelah user menekan tombol Simpan. " +
+              "JANGAN menyebutkan nomor atau ID — nilainya baru dibuat saat penyimpanan."
+            : "BELUM TERSIMPAN. Perubahan baru berlaku setelah user menekan tombol Simpan.",
       };
     },
   });

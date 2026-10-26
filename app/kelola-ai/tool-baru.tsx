@@ -30,12 +30,13 @@ const LABEL: Record<string, string> = {
   semua: "Seluruh perusahaan",
 };
 
-type Operasi = "baca" | "ubah" | "hapus";
+type Operasi = "baca" | "tambah" | "ubah" | "hapus";
 
 const LABEL_OPERASI: { nilai: Operasi; judul: string; ket: string }[] = [
   { nilai: "baca", judul: "Baca", ket: "menjawab pertanyaan dari satu sumber data" },
   { nilai: "ubah", judul: "Ubah", ket: "pengguna menyebut nilai barunya" },
   { nilai: "hapus", judul: "Batalkan", ket: "nilainya tetap, dari setelan di borang" },
+  { nilai: "tambah", judul: "Tambah", ket: "membuat baris baru atas nama pengguna" },
 ];
 
 /**
@@ -154,13 +155,18 @@ export function ToolBaru({
   const [isian, setIsian] = useState<string[]>([]);
   const [tetapKolom, setTetapKolom] = useState("");
   const [tetapNilai, setTetapNilai] = useState("");
+  const [bangkitKolom, setBangkitKolom] = useState("");
+  const [bangkitNama, setBangkitNama] = useState("");
   const [syaratKolom, setSyaratKolom] = useState("");
   const [syaratNilai, setSyaratNilai] = useState("");
 
   const menulis = operasi !== "baca";
   const dipilih = sumber.find((s) => s.kode === kodeSumber);
   const t = target.find((x) => x.sumber === sumberTulis);
-  const bisaTulis = t?.kolom.filter((k) => k.bisaTulis) ?? [];
+  // ⚠️ Hak ISI dan hak UBAH daftarnya BERBEDA. `no_ticket` boleh diisi saat
+  // tiket lahir tapi tidak boleh diubah sesudahnya; menawarkan daftar yang
+  // keliru berarti borang menjanjikan kolom yang nanti ditolak database.
+  const bisaTulis = t?.kolom.filter((k) => (operasi === "tambah" ? k.bisaIsi : k.bisaUbah)) ?? [];
 
   function gantiSumber(k: string) {
     setKodeSumber(k);
@@ -173,6 +179,8 @@ export function ToolBaru({
     setKunci([]);
     setIsian([]);
     setTetapKolom("");
+    setBangkitKolom("");
+    setBangkitNama("");
     setSyaratKolom("");
   }
 
@@ -200,14 +208,21 @@ export function ToolBaru({
                 tulis: true,
                 sumber: sumberTulis,
                 operasi,
-                kunci: kunci.map((k) => ({ kolom: k, label: k })),
-                isian: operasi === "ubah" ? isian.map((k) => ({ kolom: k, label: k })) : [],
-                otomatis:
-                  tetapKolom && tetapNilai
-                    ? [{ kolom: tetapKolom, label: tetapKolom, nilai: tetapNilai }]
+                kunci: operasi === "tambah" ? [] : kunci.map((k) => ({ kolom: k, label: k })),
+                isian:
+                  operasi === "ubah" || operasi === "tambah"
+                    ? isian.map((k) => ({ kolom: k, label: k }))
                     : [],
+                otomatis: [
+                  ...(tetapKolom && tetapNilai
+                    ? [{ kolom: tetapKolom, label: tetapKolom, nilai: tetapNilai }]
+                    : []),
+                  ...(operasi === "tambah" && bangkitKolom && bangkitNama
+                    ? [{ kolom: bangkitKolom, label: bangkitKolom, pembangkit: bangkitNama }]
+                    : []),
+                ],
                 syarat:
-                  syaratKolom && syaratNilai
+                  operasi !== "tambah" && syaratKolom && syaratNilai
                     ? [{ kolom: syaratKolom, boleh: syaratNilai.split(",").map((x) => x.trim()).filter(Boolean) }]
                     : [],
               }
@@ -301,13 +316,18 @@ export function ToolBaru({
             );
           })}
         </div>
-        {/* ⚠️ "Tambah" SENGAJA TIDAK ADA, dan sebabnya perlu ditulis supaya
-            tidak terbaca sebagai kelalaian. */}
-        <p className="mt-2 text-xs leading-relaxed text-tinta-lemah">
-          Operasi <strong className="text-tinta">Tambah</strong> belum bisa dibuat dari sini:
-          membuat baris baru sering perlu nilai yang harus dibangkitkan lebih dulu &mdash; nomor
-          tiket, misalnya &mdash; dan borang tidak bisa menyatakan aturan pembangkitnya.
-        </p>
+        {/* ⚠️ "Tambah" DIBUKA 21 Okt 2026. Sebelumnya sengaja tidak ada karena
+            baris baru sering perlu nilai yang dibangkitkan — nomor tiket —
+            dan borang tidak boleh menyatakan aturannya. Yang berubah: aturan
+            itu sekarang tinggal di kode (`lib/entri/pembangkit.ts`), dan
+            borang cuma MEMILIH dari daftar yang ada di sana. */}
+        {operasi === "tambah" && (
+          <p className="mt-2 text-xs leading-relaxed text-tinta-lemah">
+            Baris yang dibuat selalu <strong className="text-tinta">atas nama pengguna yang
+            bertanya</strong>. Kolom pemiliknya tidak muncul di bawah karena bukan isian &mdash;
+            sistem yang mengisinya dari sesi, dan tidak ada setelan yang bisa mengubahnya.
+          </p>
+        )}
       </fieldset>
 
       {menulis && (
@@ -474,22 +494,70 @@ export function ToolBaru({
               </span>
             </label>
 
-            <fieldset className="sm:col-span-2">
-              <legend className="text-sm font-medium">Kolom kunci &mdash; penunjuk barisnya</legend>
-              <p className="mb-2 text-xs text-tinta-lemah">
-                Wajib minimal satu. Tanpa kunci, perintahnya menyentuh seluruh tabel.
-              </p>
-              <Centang daftar={t.kolom} dipilih={kunci} ubah={setKunci} />
-            </fieldset>
-
-            {operasi === "ubah" && (
+            {/* Kunci TIDAK ADA untuk `tambah`: barisnya belum lahir, jadi
+                tidak ada yang bisa ditunjuk. */}
+            {operasi !== "tambah" && (
               <fieldset className="sm:col-span-2">
-                <legend className="text-sm font-medium">Kolom yang boleh diubah pengguna</legend>
+                <legend className="text-sm font-medium">Kolom kunci &mdash; penunjuk barisnya</legend>
                 <p className="mb-2 text-xs text-tinta-lemah">
-                  Hanya kolom yang role database memang boleh tulis yang muncul.
+                  Wajib minimal satu. Tanpa kunci, perintahnya menyentuh seluruh tabel.
+                </p>
+                <Centang daftar={t.kolom} dipilih={kunci} ubah={setKunci} />
+              </fieldset>
+            )}
+
+            {(operasi === "ubah" || operasi === "tambah") && (
+              <fieldset className="sm:col-span-2">
+                <legend className="text-sm font-medium">
+                  {operasi === "tambah" ? "Kolom yang diisi pengguna" : "Kolom yang boleh diubah pengguna"}
+                </legend>
+                <p className="mb-2 text-xs text-tinta-lemah">
+                  Hanya kolom yang role database memang boleh tulis yang muncul
+                  {operasi === "tambah"
+                    ? " — hak ISI, yang daftarnya berbeda dari hak ubah."
+                    : "."}
                 </p>
                 <Centang daftar={bisaTulis} dipilih={isian} ubah={setIsian} />
               </fieldset>
+            )}
+
+            {/* ⚠️ Pembangkit DIPILIH, tidak diketik. Daftarnya dari
+                `lib/entri/pembangkit.ts`; kalau tabel ini tidak punya
+                pembangkit, pilihannya memang tidak muncul. */}
+            {operasi === "tambah" && t.pembangkit.length > 0 && (
+              <>
+                <label className="flex flex-col gap-1.5 text-sm">
+                  <span className="font-medium">Kolom yang dibuat otomatis</span>
+                  <select
+                    value={bangkitKolom}
+                    onChange={(e) => setBangkitKolom(e.target.value)}
+                    className="rounded-xl border border-garis bg-kertas px-3 py-2 text-sm"
+                  >
+                    <option value="">&mdash; tidak ada &mdash;</option>
+                    {t.kolom.filter((k) => k.bisaIsi).map((k) => (
+                      <option key={k.nama} value={k.nama}>{k.nama}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex flex-col gap-1.5 text-sm">
+                  <span className="font-medium">Cara membuatnya</span>
+                  <select
+                    value={bangkitNama}
+                    onChange={(e) => setBangkitNama(e.target.value)}
+                    className="rounded-xl border border-garis bg-kertas px-3 py-2 text-sm"
+                  >
+                    <option value="">&mdash; pilih &mdash;</option>
+                    {t.pembangkit.map((p) => (
+                      <option key={p.kode} value={p.kode}>{p.nama}</option>
+                    ))}
+                  </select>
+                  <span className="text-xs text-tinta-lemah">
+                    Nilainya baru dibuat saat pengguna menekan Simpan, bukan saat rancangan
+                    ditampilkan &mdash; supaya dua orang yang membuka kartu bersamaan tidak
+                    mendapat nilai yang sama.
+                  </span>
+                </label>
+              </>
             )}
 
             <label className="flex flex-col gap-1.5 text-sm">
