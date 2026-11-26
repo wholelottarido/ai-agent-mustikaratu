@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { bacaToken, NAMA_COOKIE } from "@/lib/sesi";
 import { bolehAturAi } from "@/lib/admin";
 import { ringkasTool, sumberPilihan, izinPilihan } from "@/lib/ubah-tool";
+import { muatKonfig } from "@/lib/ai-konfig";
 import { targetTulis } from "@/lib/tool-tulis-baru";
 import { ringkasAgent, ringkasSumber, rincianAgent, rincianSumber } from "@/lib/kelola-ai";
 import { Sambungan } from "./sambungan";
@@ -84,7 +85,7 @@ export default async function HalamanKelolaAi({
       {tab === "tool" && (
         <div className="flex flex-col gap-4">
           <ToolBaru sumber={await sumberPilihan()} target={await targetTulis()} izin={await izinPilihan()} />
-          <AturTool awal={await ringkasTool()} izin={await izinPilihan()} />
+          <AturTool awal={await ringkasTool()} izin={await izinPilihan()} tinjauanAwal={(await muatKonfig()).tinjauan} />
         </div>
       )}
       {tab === "sumber" && (sp.sumber ? <RincianSumber kode={sp.sumber} /> : <TabSumber />)}

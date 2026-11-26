@@ -139,9 +139,15 @@ export async function rincianAgent(kode: string): Promise<RincianAgent | undefin
   return {
     agent,
     tool,
-    bisaDitambah: semuaTool
-      .filter((t) => t.milikKita && !dipakai.has(t.kode))
-      .map((t) => ({ kode: t.kode, nama: t.nama, view: t.view })),
+    // `ringkasTool()` memulangkan satu baris per tool PER AGENT, jadi tool yang dipakai beberapa
+    // agent (mis. `cari_sop`) muncul berkali-kali. Disatukan per kode (6 Nov 2026).
+    bisaDitambah: [
+      ...new Map(
+        semuaTool
+          .filter((t) => t.milikKita && !dipakai.has(t.kode))
+          .map((t) => [t.kode, { kode: t.kode, nama: t.nama, view: t.view }] as const),
+      ).values(),
+    ],
     manual: sambungan.pasang.filter((s) => s.agentKode === kode).map((s) => s.toolKode),
     // Tool tim lain yang dilepas dari agent ini. Ditampilkan supaya pelepasan
     // terlihat sebagai keputusan, bukan tool yang hilang entah ke mana.

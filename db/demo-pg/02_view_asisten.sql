@@ -1,7 +1,7 @@
 -- ============================================================
 -- View permukaan data untuk asisten AI
 -- ============================================================
--- Database : mustika_ratu_dev @ 157.20.255.29 (PostgreSQL 18.6)
+-- Database : mustika_ratu_dev @ <IP-SERVER-DB> (PostgreSQL 18.6)
 -- Dijalankan sebagai: postgres (superuser)
 --
 -- ⚠️ INI MENULIS KE DATABASE PERUSAHAAN. Sudah dibicarakan dengan pemegang

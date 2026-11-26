@@ -150,7 +150,7 @@ function FormLogin() {
           <div className="text-center">
             <h1 className="text-xl font-semibold tracking-tight">Pilih profil</h1>
             <p className="mt-1.5 text-sm text-tinta-lemah">
-              Akun ini dipakai {profil.length} karyawan. Pilih profil kamu untuk sesi ini.
+              Akun ini dipakai {profil.length} karyawan. Pilih profil Anda untuk sesi ini.
             </p>
           </div>
 
@@ -224,7 +224,7 @@ function FormLogin() {
           <h1 className="mt-4 text-xl font-semibold tracking-tight">Portal AI Assistant</h1>
           <p className="mt-1.5 text-sm text-tinta-lemah">
             {jenis === "portal"
-              ? "Masuk dengan akun departemen kamu."
+              ? "Masuk dengan akun departemen Anda."
               : "Masuk dengan akun sistem perusahaan."}
           </p>
         </div>

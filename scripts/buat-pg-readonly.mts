@@ -8,6 +8,10 @@
  * nilainya dilewatkan lewat `set_config` lalu disisipkan dengan `format('%L')`
  * -- aman dari penyuntikan, dan tidak muncul di riwayat perintah.
  *
+ * ⚠️ JALANKAN ULANG BERARTI MEMBUKA LAGI KOLOM PASSWORD. `GRANT SELECT ON ALL
+ * TABLES` ikut membuka `users.password`, token, dan `v_login_profil`. Sesudah
+ * skrip ini WAJIB disusul `tutup-kolom-sensitif.mts` dan `buat-pg-login.mts`.
+ *
  * Membatalkan: DROP OWNED BY ai_readonly; DROP ROLE ai_readonly;
  */
 import { Client } from "pg";
@@ -49,6 +53,10 @@ for (const sql of [
   `GRANT USAGE ON SCHEMA public TO ${RO}`,
   `GRANT SELECT ON ALL TABLES IN SCHEMA public TO ${RO}`,
   `ALTER DEFAULT PRIVILEGES FOR ROLE postgres IN SCHEMA public GRANT SELECT ON TABLES TO ${RO}`,
+  // Dokumen SOP ada di schema terpisah. Hak ini dulu tidak tercatat di skrip mana
+  // pun, dan ketahuan hilang waktu server pindah ke .89 (3 Nov 2026).
+  `GRANT USAGE ON SCHEMA ai_knowledge TO ${RO}`,
+  `GRANT SELECT ON ai_knowledge.documents, ai_knowledge.chunks TO ${RO}`,
 ]) { await c.query(sql); console.log("  ok: " + sql.slice(0, 72)); }
 
 const [r] = (await c.query(

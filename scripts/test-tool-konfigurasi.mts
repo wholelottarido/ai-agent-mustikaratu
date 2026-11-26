@@ -286,8 +286,9 @@ console.log("\n=== 9b. Dua penyaring di kolom yang sama ===");
 // `>=` sekaligus `<=`. Tidak ada galat: rentang tanggal apa pun cuma tidak
 // pernah menyaring, dan jawabannya terlihat wajar.
 {
+  // `batas_baris` (26 Nov 2026) parameter bawaan tiap alat baca, bukan penyaring — dikecualikan di sini.
   const bentukDari = (a: unknown) =>
-    Object.keys((a as { parameters?: { shape?: Record<string, unknown> } }).parameters?.shape ?? {});
+    Object.keys((a as { parameters?: { shape?: Record<string, unknown> } }).parameters?.shape ?? {}).filter((k) => k !== "batas_baris");
 
   const satu = { ...tiket, filter: [{ kolom: "status", label: "Status", operator: "sama" as const }] };
   const pSatu = bentukDari(buatToolDariKonfig([satu], sesiA).tool[0]);

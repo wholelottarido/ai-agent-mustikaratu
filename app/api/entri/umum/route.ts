@@ -17,6 +17,7 @@ import { sesiAtau401 } from "@/lib/sesi-server";
 import { muatKonfig } from "@/lib/ai-konfig";
 import { bacaKonfigTulis, jalankanUmum, masalahUmumJadiTeks } from "@/lib/entri/tulis-umum";
 import { aksesUntukEmployee } from "@/lib/akses-aplikasi";
+import { cekIzin } from "@/lib/izin-tool";
 
 export async function POST(req: Request) {
   const { sesi, balas } = await sesiAtau401();
@@ -73,9 +74,11 @@ export async function POST(req: Request) {
     // Izin ditelusuri ULANG dari peran, bukan dibaca dari token sesi. Token
     // dibuat saat login dan bisa berumur jam-jaman; peran yang dicabut lima
     // menit lalu tidak boleh masih berlaku di sini.
+    // Aturannya sama persis dengan waktu alat dirakit (`lib/izin-tool.ts`).
     const akses = sesi.idEmployee ? await aksesUntukEmployee(sesi.idEmployee) : undefined;
-    if (!(akses?.sesi.izin ?? []).includes(t.izin)) {
-      return Response.json({ error: `Butuh izin "${t.izin}".` }, { status: 403 });
+    const izin = akses ? cekIzin(t, akses.sesi) : { ok: false as const, sebab: `Butuh izin "${t.izin}".` };
+    if (!izin.ok) {
+      return Response.json({ error: izin.sebab }, { status: 403 });
     }
   }
 

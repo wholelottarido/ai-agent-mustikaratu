@@ -1,0 +1,15 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|MultiEdit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx -y @ryuxdsgn/design-intelligence@2.22.8 scan --hook"
+          }
+        ]
+      }
+    ]
+  }
+}

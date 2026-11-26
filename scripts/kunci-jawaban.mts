@@ -1,5 +1,5 @@
 /**
- * Kunci jawaban: jalankan query referensi dari docs/contoh-query.md
+ * Kunci jawaban: jalankan query referensi dari docs/database/marketing/contoh-query.md
  * langsung ke MySQL, supaya ada angka pembanding untuk menilai jawaban agent.
  *
  * Jalankan: npm run kunci

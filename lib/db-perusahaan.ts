@@ -14,6 +14,7 @@
  * `lib/db-portal.ts`.
  */
 import { Pool, types } from "pg";
+import { profilAktif, rentang } from "./profil-agent";
 
 // ⚠️ TANGGAL DIAMBIL APA ADANYA, JANGAN DIJADIKAN OBJEK Date.
 //
@@ -71,6 +72,16 @@ export function poolPerusahaan(): Pool {
     g[KUNCI].on("error", (e) => {
       console.error("[db-perusahaan] galat pool:", e.message);
     });
+
+    // Profiling (mati bawaan): span "db" per query lewat pool, hanya durasinya. Teks SQL dan hasil
+    // TIDAK dicatat. Dipasang hanya kalau flag menyala saat pool dibuat; bentuk callback dan query
+    // lewat `pool.connect()` (transaksi) tidak dibungkus. Lihat lib/profil-agent.ts.
+    if (profilAktif()) {
+      const p = g[KUNCI] as unknown as { query: (...a: unknown[]) => unknown };
+      const asli = p.query.bind(g[KUNCI]) as (...a: unknown[]) => unknown;
+      p.query = (...a: unknown[]) =>
+        typeof a[a.length - 1] === "function" ? asli(...a) : rentang("db", "pg.query", () => asli(...a) as Promise<unknown>);
+    }
   }
   return g[KUNCI];
 }

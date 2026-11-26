@@ -29,14 +29,37 @@ import type { Agent } from "@voltagent/core";
 import { aksesUntukEmployee } from "@/lib/akses-aplikasi";
 import { muatKonfig } from "@/lib/ai-konfig";
 import { buatRouter } from "./agent-konfig";
+import { buatPemegangPenjaga, type PenjagaAlur } from "@/lib/alur/penjaga-alur";
 import type { Rancangan } from "./registry-tulis";
-import type { Jejak } from "./tool-konfigurasi";
+import type { Jejak, Klarifikasi, LaporProgres, RujukanSop } from "./tool-konfigurasi";
 
 export type PilihanJalur = "lama" | "konfigurasi";
+
+/**
+ * Mencatat hasil satu panggilan alat ke daftar pertanyaan "produk yang mana?".
+ *
+ * ⚠️ ALAT YANG SELESAI TANPA BERTANYA MENGHAPUS PERTANYAANNYA SENDIRI.
+ *
+ * Model bisa salah menulis nama, dapat daftar pilihan, lalu mencoba lagi dan
+ * berhasil dalam satu jawaban. Tanpa penghapusan ini, daftar dari percobaan
+ * pertama ikut terkirim, dan tombol pilihan muncul di bawah jawaban yang sudah
+ * selesai. Tertangkap `test:pilih-produk` 3 Nov 2026 pada nama bertanda "+".
+ */
+export function catatKlarifikasi(daftar: Klarifikasi[], j: Jejak): void {
+  for (let i = daftar.length - 1; i >= 0; i--) {
+    if (daftar[i].alat === j.alat) daftar.splice(i, 1);
+  }
+  if (j.klarifikasi) daftar.push({ ...j.klarifikasi, alat: j.alat });
+}
 
 /** Jalur yang diminta environment. Nilai asing dianggap `lama`. */
 export function jalurDiminta(): PilihanJalur {
   return process.env.JALUR_AGENT === "konfigurasi" ? "konfigurasi" : "lama";
+}
+
+/** Penjaga alur Tahap 2 menyala kecuali `PENJAGA_ALUR=mati`. */
+export function penjagaDinyalakan(): boolean {
+  return process.env.PENJAGA_ALUR !== "mati";
 }
 
 export type HasilJalur =
@@ -57,8 +80,22 @@ export type HasilJalur =
       alat: string[];
       /** Rancangan yang menunggu konfirmasi manusia. Dikirim lewat metadata. */
       rancangan: Rancangan[];
+      /**
+       * Pertanyaan "produk yang mana?" beserta daftar pilihannya, diisi tool
+       * waktu nama produknya ambigu. Alasan ikut lewat metadata sama dengan
+       * `rancangan` di bawahnya — tool agent bawahan tidak sampai ke klien.
+       */
+      klarifikasi: Klarifikasi[];
+      /** Dokumen dan bagian yang benar-benar dikembalikan pencarian SOP. */
+      sop: RujukanSop[];
       /** Tool mereka yang digantikan tool portal kita, per agent. */
       gantian: { agent: string; dipakai: string; menggantikan: string[] }[];
+      /**
+       * Penjaga alur permintaan ini (Tahap 2). Panggil SESUDAH `streamText()` dan bungkus stream jawabannya
+       * dengan `jagaStream(…, penjaga(), "ui" | "full")` — tanpa pembungkus itu teks penutup (pertanyaan
+       * agent bawahan saat alur berhenti, atau pesan jujur saat jawaban kosong) tidak pernah terkirim.
+       */
+      penjaga: () => PenjagaAlur | null;
     }
   | { jalur: "lama"; sebab: string };
 
@@ -69,7 +106,13 @@ export type HasilJalur =
  * bisa `null` — dan itu bukan galat, cuma berarti jalur konfigurasi belum bisa
  * dipakai sampai orangnya login ulang.
  */
-export async function siapkanAgent(idEmployee: string | null): Promise<HasilJalur> {
+export async function siapkanAgent(
+  idEmployee: string | null,
+  maksTool?: number,
+  laporProgres?: LaporProgres,
+  /** Batas baris hasil alat baca, hanya untuk model berkapasitas kecil. Lihat `maksBarisServer()`. */
+  maksBaris?: number,
+): Promise<HasilJalur> {
   if (jalurDiminta() !== "konfigurasi") {
     return { jalur: "lama", sebab: "JALUR_AGENT bukan 'konfigurasi'" };
   }
@@ -89,9 +132,26 @@ export async function siapkanAgent(idEmployee: string | null): Promise<HasilJalu
   // Alat yang BENAR-BENAR dipanggil, bukan yang terpasang. Dua hal berbeda:
   // agent bisa memegang tujuh alat dan memakai satu.
   const alat: string[] = [];
+  // Pertanyaan "produk yang mana?" yang tersusun selama permintaan ini.
+  // Sebabnya sama dengan `rancangan` di bawah: tanpa penampung ini tombol
+  // pilihannya tidak pernah muncul, dan user harus mengetik ulang nama panjang
+  // yang baru saja ditampilkan kepadanya.
+  const klarifikasi: Klarifikasi[] = [];
+  const sop: RujukanSop[] = [];
   const catat = (j: Jejak) => {
     if (j.view && !sumber.includes(j.view)) sumber.push(j.view);
     if (!alat.includes(j.alat)) alat.push(j.alat);
+    catatKlarifikasi(klarifikasi, j);
+    for (const r of j.sop ?? []) {
+      if (!sop.some((x) => x.judul === r.judul && x.bagian === r.bagian)) sop.push(r);
+    }
+    // Ikut dikirim saat tool selesai agar footer klien tetap punya sumber
+    // meskipun jawaban melewati agent bawahan dan stream komposit.
+    laporProgres?.({
+      alat: j.alat,
+      tahap: "selesai",
+      ...(j.view ? { view: j.view } : {}),
+    });
   };
 
   // Rancangan yang tersusun selama permintaan ini. Alasannya sama dengan
@@ -103,7 +163,13 @@ export async function siapkanAgent(idEmployee: string | null): Promise<HasilJalu
     rancangan.push(r);
   };
 
-  const router = await buatRouter(akses.sesi, akses.apps, catat, catatRancangan);
+  // Penjaga alur (Tahap 2): SATU per permintaan, sama seperti penampung di atas — tidak pernah variabel
+  // modul. `PENJAGA_ALUR=mati` mematikannya tanpa mengubah kode (rollback cepat / perbandingan A-B);
+  // saklar yang dimatikan DICATAT, bukan diam-diam.
+  const pemegang = penjagaDinyalakan() ? buatPemegangPenjaga({ idSesi: idEmployee }) : undefined;
+  if (!pemegang) console.warn("[jalur-agent] PENJAGA_ALUR=mati — penjaga alur Tahap 2 tidak dipasang");
+  const sesi = maksBaris ? { ...akses.sesi, maksBaris } : akses.sesi;
+  const router = await buatRouter(sesi, akses.apps, catat, catatRancangan, maksTool, laporProgres, pemegang);
   if (!router) {
     return { jalur: "lama", sebab: "agent umum tidak ada atau sedang dimatikan di ai_agent" };
   }
@@ -117,6 +183,9 @@ export async function siapkanAgent(idEmployee: string | null): Promise<HasilJalu
     sumber,
     alat,
     rancangan,
+    klarifikasi,
+    sop,
     gantian: (await muatKonfig()).gantian,
+    penjaga: () => pemegang?.ambil() ?? null,
   };
 }

@@ -72,6 +72,15 @@ export function BarAtas({
             </Link>
           )}
 
+          {(admin || departemen === "marketing") && (
+            <Link
+              href="/rapor-ramalan"
+              className="rounded-xl px-2.5 py-2 text-xs font-medium text-tinta-lemah transition-colors hover:bg-permukaan hover:text-tinta"
+            >
+              Rapor ramalan
+            </Link>
+          )}
+
           <Link
             href="/whatsapp"
             title="Hubungkan WhatsApp"

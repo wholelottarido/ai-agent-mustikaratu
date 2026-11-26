@@ -40,7 +40,7 @@ import { z } from "zod";
 import type {
   KonfigTool, KolomIsian, KolomOtomatis, KolomKunci,
 } from "@/lib/ai-konfig";
-import type { SesiPemakai, CatatSumber } from "./tool-konfigurasi";
+import type { SesiPemakai, CatatSumber, Klarifikasi } from "./tool-konfigurasi";
 import {
   susunDraf, sidikDraf, masalahJadiTeks, KODE_TOOL as KODE_TIKET,
   type Draf, type Permintaan,
@@ -114,16 +114,22 @@ function buatToolTiket(sesi: SesiPemakai, catat?: CatatRancangan) {
       "sudah diproses — belum ada satu baris pun. Katakan rancangannya sudah " +
       "disiapkan dan minta user menekan tombol Simpan. " +
       "Kalau hasilnya `status: \"perlu-perbaikan\"`, sampaikan pilihan yang " +
-      "ditawarkan apa adanya dan tanyakan mana yang dimaksud — jangan menebak.",
+      "ditawarkan apa adanya dan tanyakan mana yang dimaksud — jangan menebak. " +
+      // Tahap 6 (F.8, RCA Q5): model dulu mengarang sub-kategori ("INTERNET") lalu perute memilihkan.
+      "⚠️ Sub-kategori HANYA diisi dengan kata yang disebut user atau yang ia pilih dari daftar. " +
+      "Kalau user belum menyebutnya, KOSONGKAN sub_kategori: alat memulangkan daftar yang sah " +
+      "dari data untuk ditanyakan ke user. Nilai yang tidak berasal dari kata user dikosongkan sistem.",
+    // Dibaca penjaga alur (voltagent/kendali-alur.ts): nilai argumen ini harus berasal dari kata pengguna.
+    tags: ["pilihan-pengguna:sub_kategori"],
     parameters: z.object({
-      kategori: z.string().describe("Kategori tiket, mis. HARDWARE, NETWORK, SOFTWARE."),
-      sub_kategori: z.string().describe("Sub-kategori di dalam kategori itu, mis. PRINTER, LAPTOP."),
+      kategori: z.string().optional().describe("Kategori tiket menurut keluhan user. Kosongkan kalau tidak jelas; alat memulangkan daftar kategori yang sah."),
+      sub_kategori: z.string().optional().describe("Sub-kategori di dalam kategori itu, HANYA dari kata user atau pilihannya dari daftar. Kosongkan kalau belum disebut."),
       judul: z.string().describe("Ringkasan satu baris masalahnya."),
       deskripsi: z.string().describe("Penjelasan masalahnya, apa adanya dari kata-kata user."),
       prioritas: z.string().optional().describe("Rendah, Normal, atau Mendesak. Kosongkan kalau user tidak menyebut."),
     }),
     execute: async (a: {
-      kategori: string; sub_kategori: string; judul: string; deskripsi: string; prioritas?: string;
+      kategori?: string; sub_kategori?: string; judul: string; deskripsi: string; prioritas?: string;
     }) => {
       const minta = {
         kategori: a.kategori,
@@ -401,12 +407,33 @@ export function buatToolTulis(
   const asli = alat.execute?.bind(alat);
   if (!asli) return alat;
   return Object.assign(alat, {
-    execute: async (a: never) => {
-      const hasil = await asli(a);
-      jejak({ alat: t.kode, view: null });
+    execute: async (a: never, ...lain: unknown[]) => {
+      const hasil = await (asli as (...x: unknown[]) => Promise<unknown>)(a, ...lain);
+      // Tahap 6: pilihan yang sah dari database ikut jadi TOMBOL di web, lewat jalur klarifikasi yang sama
+      // dengan "produk yang mana?" — pengguna memilih, bukan model.
+      const klarifikasi = klarifikasiTulis(hasil);
+      jejak({ alat: t.kode, view: null, ...(klarifikasi ? { klarifikasi } : {}) });
       return hasil;
     },
   });
+}
+
+/**
+ * Daftar pilihan dari hasil `perlu-perbaikan` alat tulis (masalah pertama yang membawa 2–20 pilihan),
+ * dalam bentuk tombol klarifikasi web. Bentuk yang tidak dikenali = tidak ada tombol, bukan galat.
+ * Diekspor untuk uji.
+ */
+export function klarifikasiTulis(hasil: unknown): Klarifikasi | undefined {
+  const h = hasil as { status?: unknown; masalah?: unknown } | null;
+  if (!h || h.status !== "perlu-perbaikan" || !Array.isArray(h.masalah)) return undefined;
+  const m = (h.masalah as { label?: unknown; pilihan?: unknown }[])
+    .find((x) => Array.isArray(x?.pilihan) && x.pilihan.length >= 2 && x.pilihan.length <= 20);
+  if (!m) return undefined;
+  const pilihan = (m.pilihan as unknown[]).map((p) => typeof p === "string"
+    ? { kode: p.slice(0, 40), nama: p }
+    : { kode: String((p as { nilai?: unknown })?.nilai ?? ""), nama: String((p as { label?: unknown })?.label ?? "") });
+  if (pilihan.some((p) => !p.kode || !p.nama || p.kode.length > 40 || p.nama.length > 200)) return undefined;
+  return { pesan: `${typeof m.label === "string" ? m.label : "Pilihan"} mana yang dimaksud?`, pilihan };
 }
 
 export function tulisDikenal(): string[] {

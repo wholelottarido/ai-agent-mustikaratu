@@ -44,7 +44,9 @@ export type Permintaan = {
 export type { Pilihan } from "./pilihan";
 
 export type Masalah =
-  | { jenis: "kurang"; kolom: string; label: string }
+  // `pilihan` (Tahap 6, F.8): untuk isian berpilihan yang kosong, daftar yang SAH ikut dipulangkan supaya
+  // pengguna memilih dari data — model tidak perlu (dan tidak boleh) menebak nilainya.
+  | { jenis: "kurang"; kolom: string; label: string; pilihan?: Pilihan[] }
   | { jenis: "kepanjangan"; kolom: string; label: string; maks: number; panjang: number }
   | { jenis: "tidak-dikenal"; kolom: string; label: string; diberi: string; pilihan: Pilihan[] }
   | { jenis: "bukan-milik-kategori"; diberi: string; kategori: string; pilihan: Pilihan[] }
@@ -167,7 +169,7 @@ export async function susunDraf(idEmployee: string | null, minta: Permintaan): P
     const daftar = await pilihanRelasi(iKat.pilihan!);
     const v = (diminta.id_category ?? "").trim();
     if (!v) {
-      if (iKat.wajib) masalah.push({ jenis: "kurang", kolom: "id_category", label: iKat.label });
+      if (iKat.wajib) masalah.push({ jenis: "kurang", kolom: "id_category", label: iKat.label, ...(daftar.length ? { pilihan: daftar } : {}) });
     } else {
       const c = cocokkan(v, daftar);
       if (Array.isArray(c)) {
@@ -192,7 +194,7 @@ export async function susunDraf(idEmployee: string | null, minta: Permintaan): P
     } else {
       const daftar = await pilihanRelasi(iSub.pilihan!, kategori.nilai);
       if (!v) {
-        if (iSub.wajib) masalah.push({ jenis: "kurang", kolom: "id_sub_category", label: iSub.label });
+        if (iSub.wajib) masalah.push({ jenis: "kurang", kolom: "id_sub_category", label: iSub.label, ...(daftar.length ? { pilihan: daftar } : {}) });
       } else {
         const c = cocokkan(v, daftar);
         if (Array.isArray(c)) {
@@ -280,7 +282,9 @@ export function masalahJadiTeks(m: Masalah[]): string {
     .map((x) => {
       switch (x.jenis) {
         case "kurang":
-          return `${x.label} belum diisi.`;
+          return x.pilihan?.length
+            ? `${x.label} belum dipilih. Pilihannya: ${x.pilihan.map((p) => p.label).join(", ")}. Tanyakan ke pengguna mana yang dimaksud.`
+            : `${x.label} belum diisi.`;
         case "kepanjangan":
           return `${x.label} kepanjangan: ${x.panjang} huruf, maksimal ${x.maks}.`;
         case "tidak-dikenal":

@@ -488,6 +488,7 @@ const TOOL: Tool[] = [
     kolom: ["nama", "departemen", "jabatan", "atasan", "mulai_kerja", "aktif"],
     filter: [
       { kolom: "nama", label: "Nama", operator: "berisi" },
+      { kolom: "departemen", label: "Departemen", operator: "berisi" },
       { kolom: "jabatan", label: "Jabatan", operator: "berisi" },
       { kolom: "aktif", label: "Aktif (true/false)", operator: "sama" },
     ],

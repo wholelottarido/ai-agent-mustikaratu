@@ -180,6 +180,15 @@ export function rapat(s: string): string {
  * dulu paragraf di atas.
  */
 export function cocokkan(diberi: string, daftar: Pilihan[]): Pilihan | Pilihan[] {
+  // Tahap 6 (24 Nov 2026): tombol pilihan di web mengirim "Label (kode X)" (`teksPilihan` di
+  // lib/cocok-pilihan.ts). Kodenya dicocokkan PERSIS ke `nilai` — lebih pasti daripada label, dan tidak
+  // melonggarkan aturan satu arah di atas. Kode yang tidak dikenal: dibuang, lalu label dicocokkan seperti biasa.
+  const k = /\s*\(kode\s+([^()]+)\)\s*$/i.exec(diberi);
+  if (k) {
+    const lewatKode = daftar.filter((p) => p.nilai === k[1].trim());
+    if (lewatKode.length === 1) return lewatKode[0];
+    diberi = diberi.slice(0, k.index);
+  }
   const q = rapat(diberi);
   const persis = daftar.filter((p) => rapat(p.label) === q);
   if (persis.length === 1) return persis[0];

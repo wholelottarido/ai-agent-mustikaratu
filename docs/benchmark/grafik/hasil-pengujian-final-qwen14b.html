@@ -1,0 +1,570 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ratu AI — Pasca-Optimasi</title>
+<script>try{var t=localStorage.getItem('tema-dashboard');if(t==='dark'||t==='light')document.documentElement.dataset.theme=t}catch(e){}</script>
+<style>
+
+:root{
+  --bg:#f6f7f9;--surface:#ffffff;--surface2:#f1f3f6;--ink:#0f172a;--ink2:#475569;--ink3:#64748b;--line:#e2e8f0;--grid:#e8ecf1;
+  --accent:#4f46e5;--accent-ink:#3730a3;--accent-soft:#eef0ff;
+  --good:#15803d;--good-soft:#e7f6ec;--bad:#b42318;--bad-soft:#fdecea;--warn:#a15c07;--warn-soft:#fdf3e1;
+  --b2p:#d97706;--b2s:#9a3412;--b3:#0f9d76;--b4:#4f46e5;
+  --w-persiapan:#8b5cf6;--w-tunggu:#94a3b8;--w-berpikir:#ea580c;--w-rencana:#0d9488;--w-menulis:#2563eb;--w-ekor:#cbd5e1;--w-alat:#ca8a04;--w-lain:#475569;
+  --pita:#eef1f5;--shadow:0 1px 2px rgba(15,23,42,.05),0 1px 3px rgba(15,23,42,.04);
+  color-scheme:light;
+}
+:root[data-theme="dark"]{
+  --bg:#0b0f17;--surface:#121826;--surface2:#182033;--ink:#e6e9ef;--ink2:#a8b1c2;--ink3:#8691a5;--line:#232c3d;--grid:#1f2737;
+  --accent:#8b8ff9;--accent-ink:#c7c9ff;--accent-soft:#1d2140;
+  --good:#4ade80;--good-soft:#11291b;--bad:#f87171;--bad-soft:#2e1416;--warn:#fbbf24;--warn-soft:#2b210d;
+  --b2p:#f59e0b;--b2s:#fb8a5a;--b3:#34d399;--b4:#8b8ff9;
+  --w-persiapan:#a78bfa;--w-tunggu:#64748b;--w-berpikir:#f97316;--w-rencana:#2dd4bf;--w-menulis:#60a5fa;--w-ekor:#334155;--w-alat:#facc15;--w-lain:#94a3b8;
+  --pita:#18202f;--shadow:none;color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased}
+button,select,input{font:inherit;color:inherit}
+a{color:var(--accent)}
+.skip{position:absolute;left:-999px;top:8px;background:var(--surface);padding:8px 12px;border-radius:8px;z-index:50}
+.skip:focus{left:8px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.app{display:grid;grid-template-columns:236px minmax(0,1fr);min-height:100vh}
+/* sidebar */
+.side{position:sticky;top:0;height:100vh;overflow:auto;background:var(--surface);border-right:1px solid var(--line);padding:20px 14px;display:flex;flex-direction:column;gap:18px}
+.brand{display:flex;gap:10px;align-items:center;padding:0 6px}
+.brand .logo{width:30px;height:30px;border-radius:8px;background:var(--accent);display:grid;place-items:center;color:#fff;font-weight:700;font-size:14px}
+.brand b{display:block;font-size:14px}.brand small{color:var(--ink3);font-size:12px}
+.nav{display:flex;flex-direction:column;gap:2px}
+.nav button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:0;background:none;padding:9px 10px;border-radius:8px;cursor:pointer;color:var(--ink2);font-weight:500}
+.nav button:hover{background:var(--surface2);color:var(--ink)}
+.nav button[aria-current="page"]{background:var(--accent-soft);color:var(--accent-ink);font-weight:600}
+.nav svg{width:17px;height:17px;flex:none;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.side .grup{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3);padding:0 10px;margin-bottom:4px}
+.side .bawah{margin-top:auto;display:flex;flex-direction:column;gap:2px}
+/* main */
+main{min-width:0;padding:28px 32px 56px;max-width:1240px;width:100%;overflow-wrap:anywhere}
+.top{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:flex-start;justify-content:space-between;margin-bottom:20px}
+.top h1{font-size:26px;line-height:1.2;margin:0 0 4px;letter-spacing:-.01em}
+.top .sub{color:var(--ink2);margin:0}
+.badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:3px 9px;border-radius:999px;background:var(--surface2);color:var(--ink2);border:1px solid var(--line)}
+.badge.hist::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--ink3)}
+.badge.agent{background:var(--accent-soft);color:var(--accent-ink);border-color:transparent}
+.badge.direct{background:var(--good-soft);color:var(--good);border-color:transparent}
+.aksi{display:flex;gap:8px;flex-wrap:wrap}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 12px;cursor:pointer;color:var(--ink2);font-weight:500;display:inline-flex;gap:6px;align-items:center}
+.btn:hover{color:var(--ink);border-color:var(--ink3)}
+.btn svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.8}
+.mtabs{display:none}
+.view[hidden]{display:none}
+.subnav{display:flex;flex-direction:column;gap:1px;margin:2px 0 8px 18px;padding-left:10px;border-left:2px solid var(--line)}
+.nav .subnav button{display:block;padding:5px 8px;font-size:12.5px;font-weight:400;color:var(--ink2);border-radius:6px;line-height:1.35;white-space:normal}
+.nav .subnav button.l3{padding-left:16px;font-size:12px;color:var(--ink3)}
+.nav .subnav button.aktif{color:var(--accent-ink);background:var(--accent-soft);font-weight:600}
+.lompat{display:none}
+.emb iframe{display:block;width:100%;height:80vh;border:0;background:var(--bg)}
+.nav .grup{margin:14px 0 4px}
+.gbox{margin:2px 0}.gbox+.gbox{margin-top:6px}.gsolo{margin-bottom:8px}
+.ghead{display:flex;align-items:center;gap:8px;width:100%;text-align:left;border:0;background:none;padding:8px 10px;border-radius:8px;cursor:pointer;color:var(--ink2)}
+.ghead:hover{background:var(--surface2)}.ghead b{font-size:12.5px;font-weight:650;display:block;color:var(--ink)}
+.ghead .tgl{display:block;font-size:10.5px;color:var(--ink3);font-weight:400}
+.chev{width:14px;height:14px;flex:0 0 14px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;transition:transform .15s}
+.gbox.buka>.ghead .chev{transform:rotate(90deg)}
+.gisi{display:none;padding-left:6px;border-left:2px solid var(--line);margin-left:16px}
+.gbox.buka>.gisi,.gsolo>.gisi{display:block}
+.subjudul{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink3);padding:10px 10px 3px}
+@media print{.gisi{display:block}}
+.nav .grup:first-child{margin-top:0}
+.nav .tgl{display:block;font-size:10.5px;text-transform:none;letter-spacing:0;color:var(--ink3);font-weight:400}
+.mtabs .sep{flex:none;align-self:center;font-size:11px;color:var(--ink3);padding:0 2px 0 8px;white-space:nowrap}
+.rilis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:14px 0}
+.rilis .card{margin:0;display:flex;flex-direction:column;gap:8px}
+.rilis .card.baru{border-left:4px solid var(--accent)}
+.rilis .tgl{font-size:12px;color:var(--ink3);margin:0}
+.rilis ul{margin:0;padding-left:18px;color:var(--ink2);font-size:13.5px}
+.rilis .angka{display:flex;gap:16px;flex-wrap:wrap;margin:2px 0}
+.rilis .angka div{display:flex;flex-direction:column}
+.rilis .angka b{font-size:20px;font-variant-numeric:tabular-nums}
+.rilis .angka span{font-size:12px;color:var(--ink2)}
+.rilis .ke{display:flex;flex-wrap:wrap;gap:6px;margin-top:auto;padding-top:6px}
+@media (max-width:1100px){.rilis{grid-template-columns:minmax(0,1fr)}}
+h2{font-size:18px;margin:30px 0 4px;letter-spacing:-.005em}
+h3{font-size:15px;margin:0 0 4px}
+.lead{color:var(--ink2);margin:0 0 14px;max-width:880px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px 20px;box-shadow:var(--shadow);margin:14px 0}
+.card .ket{color:var(--ink2);font-size:13px;margin:0 0 10px}
+.src{color:var(--ink3);font-size:12px;margin:10px 0 0}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.grid2>.card,.grid3>.card{margin:0;min-width:0}
+.card{min-width:0}
+.hero{background:linear-gradient(0deg,var(--surface),var(--surface));border-left:4px solid var(--accent)}
+.hero p{margin:0 0 8px;font-size:15px;max-width:920px}
+.hero .batas{color:var(--ink3);font-size:13px;margin:0}
+.kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:14px 0}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:2px;min-width:0}
+.kpi .l{font-size:12.5px;color:var(--ink2);font-weight:500}
+.kpi .v{font-size:27px;font-weight:700;letter-spacing:-.02em;line-height:1.25;font-variant-numeric:tabular-nums}
+.kpi .v small{font-size:14px;font-weight:600;color:var(--ink2);margin-left:3px}
+.kpi .k{font-size:12px;color:var(--ink3)}
+.delta{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:10px;max-width:100%;margin-top:6px;align-self:flex-start;line-height:1.4}
+.delta.good{background:var(--good-soft);color:var(--good)}.delta.bad{background:var(--bad-soft);color:var(--bad)}.delta.netral{background:var(--surface2);color:var(--ink2)}
+.list{margin:0;padding-left:18px}.list li{margin:5px 0}
+.ctl{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;margin:4px 0 12px}
+.ctl .lbl{font-size:12px;color:var(--ink3);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.seg{display:inline-flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:9px;padding:2px;background:var(--surface2);gap:2px}
+.seg button{border:0;background:none;padding:5px 11px;border-radius:7px;cursor:pointer;color:var(--ink2);font-size:13px;font-weight:500}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow);font-weight:600}
+.chk{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--ink2);cursor:pointer;padding:3px 8px 3px 6px;border-radius:7px;border:1px solid var(--line);background:var(--surface)}
+.chk input{accent-color:var(--accent)}
+.chk i,.leg i{display:inline-block;width:10px;height:10px;border-radius:3px}
+select{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:5px 8px}
+.leg{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12.5px;color:var(--ink2);margin:2px 0 6px}
+.leg span{display:inline-flex;align-items:center;gap:6px}
+.chart{width:100%;min-height:40px}
+.chart svg{display:block;width:100%;height:auto;overflow:visible}
+.chart .gl{stroke:var(--grid)}.chart .ax{fill:var(--ink3);font-size:11px}.chart .axt{fill:var(--ink2);font-size:11.5px}
+.chart .el{fill:var(--ink);font-size:11px;font-weight:600}
+.chart .ref{stroke:var(--ink3);stroke-dasharray:4 4}
+.chart .pt{cursor:pointer}
+.chart .band{fill:var(--pita)}
+.interpret{background:var(--accent-soft);color:var(--ink);border-radius:9px;padding:10px 13px;font-size:13.5px;margin:12px 0 0}
+.interpret b{color:var(--accent-ink)}
+.caveat{background:var(--warn-soft);border-radius:9px;padding:10px 13px;font-size:13.5px;margin:10px 0}
+.caveat b{color:var(--warn)}
+.na{color:var(--ink3);font-style:italic}
+details.raw{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+details.raw>summary{cursor:pointer;color:var(--accent);font-weight:600;font-size:13px;list-style:none;display:inline-flex;gap:6px;align-items:center}
+details.raw>summary::-webkit-details-marker{display:none}
+details.raw>summary::before{content:"▸";transition:transform .15s}
+details.raw[open]>summary::before{transform:rotate(90deg)}
+.tblbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0 6px}
+.tblbar input{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:5px 10px;min-width:0;width:220px;max-width:100%}
+.tblbar .n{color:var(--ink3);font-size:12px;margin-left:auto}
+.tw{overflow:auto;max-height:520px;border:1px solid var(--line);border-radius:9px}
+table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
+th,td{padding:7px 10px;border-bottom:1px solid var(--grid);text-align:left;white-space:nowrap}
+td.num,th.num{text-align:right}
+thead th{position:sticky;top:0;background:var(--surface2);color:var(--ink2);font-weight:600;z-index:1}
+th button{all:unset;cursor:pointer;display:inline-flex;gap:4px;align-items:center}
+th button::after{content:"↕";color:var(--ink3);font-size:11px}
+th[aria-sort="ascending"] button::after{content:"↑";color:var(--accent)}
+th[aria-sort="descending"] button::after{content:"↓";color:var(--accent)}
+tbody tr:hover{background:var(--surface2)}
+td.wrap{white-space:normal;min-width:220px}
+.ok{color:var(--good);font-weight:600}.no{color:var(--bad);font-weight:600}.warn{color:var(--warn);font-weight:600}
+#tip{position:fixed;z-index:60;pointer-events:none;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.45;padding:8px 10px;border-radius:8px;max-width:320px;white-space:pre-line;display:none;box-shadow:0 6px 20px rgba(0,0,0,.18)}
+/* drawer */
+.scrim{position:fixed;inset:0;background:rgba(15,23,42,.35);z-index:40}
+.scrim[hidden]{display:none}
+.drawer{position:fixed;top:0;right:0;height:100vh;width:min(720px,100vw);background:var(--surface);z-index:41;overflow:auto;padding:22px 24px 40px;border-left:1px solid var(--line);box-shadow:-10px 0 30px rgba(0,0,0,.15)}
+.drawer[hidden]{display:none}
+.drawer .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.drawer h2{margin:0}
+dl.gloss{display:grid;grid-template-columns:150px 1fr;gap:8px 16px;margin:12px 0}
+dl.gloss dt{font-weight:700}dl.gloss dd{margin:0;color:var(--ink2)}
+.foot{color:var(--ink3);font-size:12px;margin-top:36px;border-top:1px solid var(--line);padding-top:14px}
+@media (max-width:1100px){.grid3,.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:900px){
+.lompat{display:block;position:fixed;right:12px;bottom:12px;z-index:30;max-width:calc(100vw - 24px);padding:9px 12px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-weight:600;box-shadow:var(--shadow)}
+.lompat:empty{display:none}
+  .app{grid-template-columns:minmax(0,1fr)}
+  .side{display:none}
+  main{padding:16px 16px 48px}
+  .mtabs{display:flex;gap:4px;overflow-x:auto;position:sticky;top:0;z-index:20;background:var(--bg);padding:8px 0;margin:0 0 10px;border-bottom:1px solid var(--line)}
+  .mtabs button{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;font-size:13px;color:var(--ink2);cursor:pointer}
+  .mtabs button[aria-current="page"]{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .grid2,.grid3{grid-template-columns:minmax(0,1fr)}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .top h1{font-size:22px}
+  .kpi .v{font-size:23px}
+  dl.gloss{grid-template-columns:1fr}
+}
+@media (max-width:520px){.kpis{grid-template-columns:1fr}}
+@media print{
+  .side,.mtabs,.aksi,.ctl,.tblbar,#tip,.scrim,.drawer,.lompat{display:none!important}
+  .app{display:block} main{max-width:none;padding:0}
+  .view[hidden]{display:block!important}
+  .view{break-before:page}
+  .view:first-of-type{break-before:auto}
+  .card,.kpi{box-shadow:none;break-inside:avoid}
+  details.raw{display:none}
+  .tw{max-height:none;overflow:visible}
+  body{background:#fff}
+}
+
+.bar-lama{fill:var(--ink3);opacity:.55}.bar-baru{fill:var(--accent)}
+.s-lulus{fill:var(--good)}.s-sebagian{fill:var(--warn)}.s-gagal{fill:var(--bad)}
+.dot{display:inline-block;width:10px;height:10px;border-radius:3px}
+.mini{font-size:12px;color:var(--ink3)}
+.pill{display:inline-block;font-size:11.5px;padding:1px 8px;border-radius:10px;background:var(--surface2);color:var(--ink2);margin:1px 2px 1px 0}
+.pill.gagal{background:var(--bad-soft);color:var(--bad)}.pill.sebagian{background:var(--warn-soft);color:var(--warn)}.pill.lulus{background:var(--good-soft);color:var(--good)}
+.rca{border-left:3px solid var(--bad);padding:2px 0 2px 12px;margin:10px 0}
+.rca.ev{border-color:var(--warn)}
+.rca h4{margin:0 0 4px;font-size:14px}
+.rca p{margin:3px 0;font-size:13px;color:var(--ink2)}
+@media (max-width:860px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.grid2,.grid3{grid-template-columns:1fr}}
+@media (max-width:520px){.kpis{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<a class="skip" href="#isi">Lewati ke konten</a>
+<div class="app">
+  <aside class="side" aria-label="Navigasi dashboard">
+    <div class="brand"><div class="logo" aria-hidden="true">R</div><div><b>Ratu AI</b><small>Pasca-optimasi Tahap 1–6</small></div></div>
+    <nav class="nav" id="nav" aria-label="Halaman"></nav>
+    <div class="bawah"><div class="grup">Referensi</div>
+      <div class="nav"><button type="button" id="b-metode"><svg viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h10"/></svg>Metodologi &amp; sumber</button></div>
+    </div>
+  </aside>
+  <main id="isi" tabindex="-1">
+    <div class="mtabs" id="mtabs" role="navigation" aria-label="Navigasi"></div>
+    <header class="top">
+      <div>
+        <h1>Ratu AI — Benchmark Pasca-Optimasi</h1>
+        <p class="sub">Qwen3-14B-AWQ · 4 replika vLLM · max-num-seqs 4 · LiteLLM simple-shuffle · g5.12xlarge (4× A10G) · 1 sampai 20 pengguna bersamaan</p>
+        <div class="badges"><span class="badge hist" id="b-tgl"></span><span class="badge agent">Sesudah Tahap 1–6</span><span class="badge">Baseline: 20 &amp; 23 Nov (sebelum optimasi)</span></div>
+      </div>
+      <div class="aksi">
+        <button class="btn" type="button" id="cetak">Cetak / PDF</button>
+        <button class="btn" type="button" id="tema" aria-pressed="false">Tema gelap</button>
+      </div>
+    </header>
+    <section class="view" id="v-ringkas"></section>
+    <section class="view" id="v-tahap" hidden></section>
+    <section class="view" id="v-kode" hidden></section>
+    <section class="view" id="v-rute" hidden></section>
+    <section class="view" id="v-infra" hidden></section>
+    <section class="view" id="v-biaya" hidden></section>
+    <section class="view" id="v-gagal" hidden></section>
+    <section class="view" id="v-metode" hidden></section>
+    <p class="foot" id="foot"></p>
+  </main>
+</div>
+<div class="scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-judul" hidden></aside>
+<div id="tip" role="tooltip"></div>
+<script>
+const DATA = {"meta":{"tanggal":"Uji 24 November 2026, 07:54–08:45 UTC","tarif":7.94,"dibuat":"24 Nov 2026 16:33","konfig":["Qwen3-14B-AWQ (served qwen3-14b), 4 replika vLLM independen, image 390a656b54e1 — sama dengan uji 23 Nov","max-num-seqs 4 · max-model-len 16384 · gpu-memory-utilization 0.85 di keempat replika","LiteLLM simple-shuffle, num_retries 0 · Cloudflare Quick Tunnel · model portal mr-ai-gateway-4gpu","PENJAGA_ALUR menyala · RUTE_KEMAMPUAN menyala · Anthropic diblokir di proses uji: True","Workload sama dengan baseline: pemanasan 8, beban 1/2/3/5/8/10/12/16/20 pengguna × 3 pertanyaan, jeda 5 dtk, jeda tahap 120 dtk, batas 300 dtk","Evaluator v1 (kriteria lama) + v2 (scripts/lib/evaluator-agent.mts), tidak diubah"],"sumber":["data/agent-workflow-latency/2026-11-24-07-50-14b-post-optimization-seqs4/T7-konkurensi","data/agent-workflow-latency/2026-11-20-07-30-4gpu (baseline 1–8 pengguna)","data/agent-workflow-latency/2026-11-23-08-35-14b-seqs4-c10-20 (baseline 10–20 pengguna)","data/agent-workflow-latency/evaluasi-v2/per-skenario.csv (v2 baseline)","docs/workflow-agent/hasil-pengujian-final-tahap1-6-qwen14b.md (laporan)"],"banding":["Sama: model, image vLLM, max-num-seqs, jumlah replika, LiteLLM, akun uji, workload & urutan (seed tetap), batas waktu.","v2 lahir sesudah baseline; data lama dinilai ulang dari bukti yang tercatat saat itu.","v1 turun 220 → 217 karena kriteria lama Q5 tidak mengenali klarifikasi kategori (Tahap 6); v2 menilainya benar.","Pembatalan saat habis waktu menyala di uji baru; tidak ada yang habis waktu, jadi tidak memengaruhi angka.","Durasi tahap = jam dinding sampai pertanyaan terakhir selesai; ekor panjang baseline memperpanjang tahapnya.","Pencatatan delegasi baru ada sejak 24 Nov (delegasi baseline = 0 bukan berarti tanpa delegasi).","Satu kali jalan per kondisi; sampel per tahap kecil. Setelan Kelola AI bisa berubah antar-hari (akun uji: Portal 10, Super Tools 5, Marketing 7 alat — sama dengan 23 Nov)."],"cakupan":"Dashboard ini hanya memuat T7 (benchmark konkurensi). T1 dihentikan sesudah 7 skenario; T2–T6 belum dijalankan.","batasan":["Satu kali jalan per tingkat konkurensi; sampel 1–8 pengguna kecil (3–24 pertanyaan).","Pemakaian KV cache dan log statistik vLLM tidak tercatat: instance sudah dimatikan sebelum log diambil.","Token per workflow dihitung dari workflow yang seluruh panggilannya cocok dengan catatan LiteLLM (88% panggilan).","Pengalihan otomatis Tahap 3 belum teruji live: untuk Q4 model hampir selalu langsung memilih pemegang SOP; satu-satunya salah pilih (F1) jatuh ke agent tanpa alat, cabang yang belum mengalihkan.","Tarif biaya memakai angka laporan sebelumnya ($7,94/jam), bukan tagihan aktual.","Jalur web belum meneruskan pembatalan dari browser (req.signal) — belum diuji di sini."]},"tahap":[{"pengguna":1,"baru":{"n":3,"ok":3,"habis":0,"kosong":0,"galat":0,"v1":3,"v1_pct":100.0,"v2":{"lulus":3},"v2_lulus_pct":100.0,"v2_gagal":0,"v2_sebagian":0,"gagal_detail":[],"mean":15.8,"p50":14.1,"p90":21.8,"p95":22.8,"p99":23.5,"min":9.5,"max":23.7,"ttft_p50":5.0,"llm_per_wf":2.67,"perute_per_wf":1.67,"token_masuk_per_wf":11266,"token_keluar_per_wf":640,"token_sampel":3,"delegasi_per_wf":0.67,"delegasi_ditolak":{},"antre_ms":0.02112337506332551,"ttft_vllm_ms":120.51239609718323,"e2e_vllm_ms":4975.996375083923,"preemption":0,"kv_cache":0.9562696017515829,"gpu_util":17.06304347826087,"vram":19519,"watt_total":367.8205217391304,"durasi_dtk":57.64,"wf_per_menit":3.12,"wf_sukses_per_menit":3.12,"biaya_usd":0.127,"usd_per_wf":0.0424,"usd_per_sukses":0.0424,"replika":{"qwen14-gpu1":{"panggilan":4,"token_keluar":690,"token_masuk":16655,"lt":4},"qwen14-gpu2":{"panggilan":2,"token_keluar":704,"token_masuk":7325,"lt":2},"qwen14-gpu3":{"panggilan":1,"token_keluar":221,"token_masuk":4152,"lt":1},"qwen14-vllm":{"panggilan":1,"token_keluar":304,"token_masuk":5666,"lt":1}}},"lama":{"n":3,"ok":3,"habis":0,"kosong":0,"galat":0,"v1":3,"v1_pct":100.0,"v2":{"lulus":3},"v2_lulus_pct":100.0,"v2_gagal":0,"v2_sebagian":0,"gagal_detail":[],"mean":21.0,"p50":23.6,"p90":26.3,"p95":26.6,"p99":26.9,"min":12.3,"max":27.0,"ttft_p50":3.4,"llm_per_wf":2.67,"perute_per_wf":1.67,"token_masuk_per_wf":9694,"token_keluar_per_wf":962,"token_sampel":3,"delegasi_per_wf":0,"delegasi_ditolak":{},"antre_ms":0.02148549947378342,"ttft_vllm_ms":119.88314986228943,"e2e_vllm_ms":7402.551740407944,"preemption":0,"kv_cache":0.9484578619812262,"gpu_util":20.205479452054796,"vram":19521,"watt_total":380.15999999999997,"durasi_dtk":72.916,"wf_per_menit":2.47,"wf_sukses_per_menit":2.47,"biaya_usd":0.161,"usd_per_wf":0.0536,"usd_per_sukses":0.0536,"replika":{"qwen14-gpu1":{"panggilan":1,"token_keluar":296,"token_masuk":4872,"lt":1},"qwen14-gpu2":{"panggilan":3,"token_keluar":745,"token_masuk":11512,"lt":3},"qwen14-gpu3":{"panggilan":2,"token_keluar":383,"token_masuk":7148,"lt":2},"qwen14-vllm":{"panggilan":2,"token_keluar":1463,"token_masuk":5551,"lt":2}}}},{"pengguna":2,"baru":{"n":6,"ok":6,"habis":0,"kosong":0,"galat":0,"v1":5,"v1_pct":83.3,"v2":{"lulus":6},"v2_lulus_pct":100.0,"v2_gagal":0,"v2_sebagian":0,"gagal_detail":[],"mean":32.7,"p50":34.5,"p90":48.2,"p95":48.4,"p99":48.5,"min":10.8,"max":48.6,"ttft_p50":4.7,"llm_per_wf":3.5,"perute_per_wf":1.67,"token_masuk_per_wf":17507,"token_keluar_per_wf":1244,"token_sampel":6,"delegasi_per_wf":0.83,"delegasi_ditolak":{},"antre_ms":0.02122490488026025,"ttft_vllm_ms":352.3994513920375,"e2e_vllm_ms":7793.376672835577,"preemption":0,"kv_cache":0.8932046229127397,"gpu_util":30.730923694779115,"vram":19519,"watt_total":453.10855421686745,"durasi_dtk":124.688,"wf_per_menit":2.89,"wf_sukses_per_menit":2.89,"biaya_usd":0.275,"usd_per_wf":0.0458,"usd_per_sukses":0.0458,"replika":{"qwen14-gpu1":{"panggilan":5,"token_keluar":2074,"token_masuk":29573,"lt":5},"qwen14-gpu2":{"panggilan":3,"token_keluar":2316,"token_masuk":16063,"lt":3},"qwen14-gpu3":{"panggilan":7,"token_keluar":1375,"token_masuk":34672,"lt":7},"qwen14-vllm":{"panggilan":6,"token_keluar":1701,"token_masuk":24734,"lt":6}}},"lama":{"n":6,"ok":6,"habis":0,"kosong":0,"galat":0,"v1":5,"v1_pct":83.3,"v2":{"gagal":2,"lulus":4},"v2_lulus_pct":66.7,"v2_gagal":2,"v2_sebagian":0,"gagal_detail":[{"kode":"Q8","v2":"gagal","kategori":"pesan-internal","dtk":33.5,"trace":"85b9fb63-7473-4868-8011-0776434e8ba4"},{"kode":"Q4","v2":"gagal","kategori":"tanpa-alat-sop","dtk":13.4,"trace":"d4e01e1d-db7d-4b6e-aa1e-c5bcfcd767f9"}],"mean":33.3,"p50":32.5,"p90":49.2,"p95":54.3,"p99":58.4,"min":13.4,"max":59.4,"ttft_p50":3.3,"llm_per_wf":3.33,"perute_per_wf":1.83,"token_masuk_per_wf":13608,"token_keluar_per_wf":1500,"token_sampel":6,"delegasi_per_wf":0,"delegasi_ditolak":{},"antre_ms":0.016972450430330355,"ttft_vllm_ms":242.61298179626465,"e2e_vllm_ms":9592.048144340515,"preemption":0,"kv_cache":0.8975332533130833,"gpu_util":33.350746268656714,"vram":19521,"watt_total":464.66100746268654,"durasi_dtk":134.366,"wf_per_menit":2.68,"wf_sukses_per_menit":1.79,"biaya_usd":0.296,"usd_per_wf":0.0494,"usd_per_sukses":0.0741,"replika":{"qwen14-gpu1":{"panggilan":8,"token_keluar":3207,"token_masuk":33310,"lt":8},"qwen14-gpu2":{"panggilan":6,"token_keluar":3639,"token_masuk":22476,"lt":6},"qwen14-gpu3":{"panggilan":3,"token_keluar":1460,"token_masuk":12991,"lt":3},"qwen14-vllm":{"panggilan":3,"token_keluar":695,"token_masuk":12869,"lt":3}}}},{"pengguna":3,"baru":{"n":9,"ok":9,"habis":0,"kosong":0,"galat":0,"v1":9,"v1_pct":100.0,"v2":{"lulus":8,"sebagian":1},"v2_lulus_pct":88.9,"v2_gagal":0,"v2_sebagian":1,"gagal_detail":[{"kode":"Q5","v2":"sebagian","kategori":"penawaran","dtk":16.5,"trace":"1abd3b6c-6871-4b75-8229-ead8eb674792"}],"mean":34.4,"p50":32.7,"p90":56.7,"p95":65.8,"p99":73.1,"min":12.7,"max":74.9,"ttft_p50":5.9,"llm_per_wf":3.44,"perute_per_wf":1.78,"token_masuk_per_wf":16336,"token_keluar_per_wf":1398,"token_sampel":9,"delegasi_per_wf":0.89,"delegasi_ditolak":{},"antre_ms":0.01670267761989136,"ttft_vllm_ms":347.07274744587556,"e2e_vllm_ms":8908.287302140267,"preemption":0,"kv_cache":0.8658296037327747,"gpu_util":41.808970099667775,"vram":19519,"watt_total":521.6169102990033,"durasi_dtk":150.46,"wf_per_menit":3.59,"wf_sukses_per_menit":3.19,"biaya_usd":0.332,"usd_per_wf":0.0369,"usd_per_sukses":0.0415,"replika":{"qwen14-gpu1":{"panggilan":5,"token_keluar":1792,"token_masuk":23704,"lt":5},"qwen14-gpu2":{"panggilan":9,"token_keluar":2934,"token_masuk":39437,"lt":9},"qwen14-gpu3":{"panggilan":5,"token_keluar":2341,"token_masuk":28900,"lt":5},"qwen14-vllm":{"panggilan":12,"token_keluar":5516,"token_masuk":54981,"lt":12}}},"lama":{"n":9,"ok":9,"habis":0,"kosong":0,"galat":0,"v1":8,"v1_pct":88.9,"v2":{"lulus":8,"gagal":1},"v2_lulus_pct":88.9,"v2_gagal":1,"v2_sebagian":0,"gagal_detail":[{"kode":"Q5","v2":"gagal","kategori":"pesan-internal","dtk":31.4,"trace":"fa034cfa-73fe-4ab4-881b-2b8965c6fd8a"}],"mean":42.5,"p50":36.1,"p90":83.9,"p95":87.2,"p99":89.9,"min":13.4,"max":90.6,"ttft_p50":4.5,"llm_per_wf":4.11,"perute_per_wf":2,"token_masuk_per_wf":18466,"token_keluar_per_wf":1831,"token_sampel":9,"delegasi_per_wf":0,"delegasi_ditolak":{},"antre_ms":0.017521729475717892,"ttft_vllm_ms":316.39756383122625,"e2e_vllm_ms":9962.115448874396,"preemption":0,"kv_cache":0.8776249443421543,"gpu_util":44.453125,"vram":19521,"watt_total":536.005386904762,"durasi_dtk":168.211,"wf_per_menit":3.21,"wf_sukses_per_menit":2.85,"biaya_usd":0.371,"usd_per_wf":0.0412,"usd_per_sukses":0.0464,"replika":{"qwen14-gpu1":{"panggilan":7,"token_keluar":1949,"token_masuk":29046,"lt":7},"qwen14-gpu2":{"panggilan":9,"token_keluar":4559,"token_masuk":38985,"lt":9},"qwen14-gpu3":{"panggilan":10,"token_keluar":4428,"token_masuk":39942,"lt":10},"qwen14-vllm":{"panggilan":11,"token_keluar":5541,"token_masuk":58221,"lt":11}}}},{"pengguna":5,"baru":{"n":15,"ok":15,"habis":0,"kosong":0,"galat":0,"v1":13,"v1_pct":86.7,"v2":{"lulus":15},"v2_lulus_pct":100.0,"v2_gagal":0,"v2_sebagian":0,"gagal_detail":[],"mean":34.9,"p50":30.2,"p90":56.1,"p95":69.1,"p99":82.4,"min":11.1,"max":85.7,"ttft_p50":4.2,"llm_per_wf":3.6,"perute_per_wf":1.8,"token_masuk_per_wf":16347,"token_keluar_per_wf":1368,"token_sampel":10,"delegasi_per_wf":0.93,"delegasi_ditolak":{},"antre_ms":0.016523833269106773,"ttft_vllm_ms":317.8362272403858,"e2e_vllm_ms":9115.50400433717,"preemption":0,"kv_cache":0.894406106634797,"gpu_util":48.56831831831832,"vram":19519,"watt_total":567.0998798798798,"durasi_dtk":166.593,"wf_per_menit":5.4,"wf_sukses_per_menit":5.4,"biaya_usd":0.367,"usd_per_wf":0.0245,"usd_per_sukses":0.0245,"replika":{"qwen14-gpu1":{"panggilan":10,"token_keluar":6779,"token_masuk":51833,"lt":10},"qwen14-gpu2":{"panggilan":14,"token_keluar":5618,"token_masuk":58577,"lt":12},"qwen14-gpu3":{"panggilan":18,"token_keluar":3912,"token_masuk":67503,"lt":16},"qwen14-vllm":{"panggilan":12,"token_keluar":3121,"token_masuk":54479,"lt":11}}},"lama":{"n":15,"ok":15,"habis":0,"kosong":0,"galat":0,"v1":15,"v1_pct":100.0,"v2":{"lulus":14,"gagal":1},"v2_lulus_pct":93.3,"v2_gagal":1,"v2_sebagian":0,"gagal_detail":[{"kode":"Q8","v2":"gagal","kategori":"pesan-internal","dtk":26.1,"trace":"7733c56d-ceb9-4129-a711-f168542bf6c4"}],"mean":34.5,"p50":33.2,"p90":49.8,"p95":56.3,"p99":63.3,"min":11.4,"max":65.1,"ttft_p50":4.3,"llm_per_wf":3.73,"perute_per_wf":1.93,"token_masuk_per_wf":15782,"token_keluar_per_wf":1456,"token_sampel":15,"delegasi_per_wf":0,"delegasi_ditolak":{},"antre_ms":0.015301339512266816,"ttft_vllm_ms":359.76647479193554,"e2e_vllm_ms":8996.922897441047,"preemption":0,"kv_cache":0.8716310978185566,"gpu_util":61.80721830985915,"vram":19521,"watt_total":650.5492605633802,"durasi_dtk":142.261,"wf_per_menit":6.33,"wf_sukses_per_menit":5.9,"biaya_usd":0.314,"usd_per_wf":0.0209,"usd_per_sukses":0.0224,"replika":{"qwen14-gpu1":{"panggilan":11,"token_keluar":2658,"token_masuk":39028,"lt":11},"qwen14-gpu2":{"panggilan":14,"token_keluar":6868,"token_masuk":69567,"lt":14},"qwen14-gpu3":{"panggilan":12,"token_keluar":4318,"token_masuk":44382,"lt":12},"qwen14-vllm":{"panggilan":19,"token_keluar":7997,"token_masuk":83747,"lt":19}}}},{"pengguna":8,"baru":{"n":24,"ok":24,"habis":0,"kosong":0,"galat":0,"v1":24,"v1_pct":100.0,"v2":{"lulus":22,"sebagian":2},"v2_lulus_pct":91.7,"v2_gagal":0,"v2_sebagian":2,"gagal_detail":[{"kode":"Q5","v2":"sebagian","kategori":"penawaran","dtk":21.5,"trace":"d93361df-c47f-4da9-8dcc-7c9b83c0c029"},{"kode":"Q5","v2":"sebagian","kategori":"penawaran","dtk":16.9,"trace":"799fae25-3565-45d0-8a5f-773140f85f87"}],"mean":35.0,"p50":31.1,"p90":64.5,"p95":73.7,"p99":85.0,"min":10.6,"max":88.0,"ttft_p50":5.0,"llm_per_wf":3.42,"perute_per_wf":1.79,"token_masuk_per_wf":15229,"token_keluar_per_wf":1285,"token_sampel":18,"delegasi_per_wf":0.88,"delegasi_ditolak":{},"antre_ms":0.012771950782791216,"ttft_vllm_ms":318.7848079351731,"e2e_vllm_ms":9688.595939565588,"preemption":0,"kv_cache":0.8965863505784312,"gpu_util":67.36159420289854,"vram":19519,"watt_total":688.7987536231884,"durasi_dtk":172.341,"wf_per_menit":8.36,"wf_sukses_per_menit":7.66,"biaya_usd":0.38,"usd_per_wf":0.0158,"usd_per_sukses":0.0173,"replika":{"(tidak tercatat)":{"panggilan":1,"token_keluar":0,"token_masuk":0,"lt":0},"qwen14-gpu1":{"panggilan":19,"token_keluar":6308,"token_masuk":88343,"lt":18},"qwen14-gpu2":{"panggilan":20,"token_keluar":7224,"token_masuk":88852,"lt":19},"qwen14-gpu3":{"panggilan":21,"token_keluar":8039,"token_masuk":82091,"lt":19},"qwen14-vllm":{"panggilan":21,"token_keluar":9196,"token_masuk":98427,"lt":19}}},"lama":{"n":24,"ok":24,"habis":0,"kosong":0,"galat":0,"v1":24,"v1_pct":100.0,"v2":{"lulus":22,"sebagian":2},"v2_lulus_pct":91.7,"v2_gagal":0,"v2_sebagian":2,"gagal_detail":[{"kode":"Q5","v2":"sebagian","kategori":"penawaran","dtk":23.0,"trace":"e67d9a7b-a633-4e44-8f1d-c37e79f6b236"},{"kode":"Q5","v2":"sebagian","kategori":"penawaran","dtk":25.1,"trace":"8843c782-a5a0-4e4b-b81d-bcf093ae0b53"}],"mean":38.4,"p50":35.5,"p90":61.7,"p95":67.7,"p99":68.7,"min":12.0,"max":68.8,"ttft_p50":4.7,"llm_per_wf":3.75,"perute_per_wf":2,"token_masuk_per_wf":15865,"token_keluar_per_wf":1511,"token_sampel":24,"delegasi_per_wf":0,"delegasi_ditolak":{},"antre_ms":74.04913411115153,"ttft_vllm_ms":383.45030148824054,"e2e_vllm_ms":9880.244965023465,"preemption":0,"kv_cache":0.8834332626868259,"gpu_util":72.59097859327217,"vram":19521,"watt_total":719.2040061162079,"durasi_dtk":163.59,"wf_per_menit":8.8,"wf_sukses_per_menit":8.07,"biaya_usd":0.361,"usd_per_wf":0.015,"usd_per_sukses":0.0164,"replika":{"qwen14-gpu1":{"panggilan":21,"token_keluar":8909,"token_masuk":88492,"lt":21},"qwen14-gpu2":{"panggilan":24,"token_keluar":9673,"token_masuk":103408,"lt":24},"qwen14-gpu3":{"panggilan":27,"token_keluar":10111,"token_masuk":110459,"lt":27},"qwen14-vllm":{"panggilan":18,"token_keluar":7570,"token_masuk":78410,"lt":18}}}},{"pengguna":10,"baru":{"n":30,"ok":30,"habis":0,"kosong":0,"galat":0,"v1":29,"v1_pct":96.7,"v2":{"lulus":28,"sebagian":2},"v2_lulus_pct":93.3,"v2_gagal":0,"v2_sebagian":2,"gagal_detail":[{"kode":"Q5","v2":"sebagian","kategori":"penawaran","dtk":23.0,"trace":"2fe3f4bd-ed91-4960-933e-56ab2238e647"},{"kode":"Q5","v2":"sebagian","kategori":"penawaran","dtk":23.8,"trace":"fcf8a636-7e4f-480a-8194-5b1dbd199b81"}],"mean":37.5,"p50":37.1,"p90":57.0,"p95":68.5,"p99":82.1,"min":9.3,"max":86.4,"ttft_p50":4.9,"llm_per_wf":3.4,"perute_per_wf":1.73,"token_masuk_per_wf":15263,"token_keluar_per_wf":1250,"token_sampel":20,"delegasi_per_wf":0.87,"delegasi_ditolak":{},"antre_ms":597.6696725688004,"ttft_vllm_ms":936.8653274049947,"e2e_vllm_ms":10188.915778608884,"preemption":0,"kv_cache":0.8942144472338713,"gpu_util":65.6472602739726,"vram":19521,"watt_total":679.1635616438357,"durasi_dtk":182.099,"wf_per_menit":9.88,"wf_sukses_per_menit":9.23,"biaya_usd":0.402,"usd_per_wf":0.0134,"usd_per_sukses":0.0143,"replika":{"qwen14-gpu1":{"panggilan":25,"token_keluar":10278,"token_masuk":104898,"lt":21},"qwen14-gpu2":{"panggilan":18,"token_keluar":4638,"token_masuk":77300,"lt":17},"qwen14-gpu3":{"panggilan":32,"token_keluar":9284,"token_masuk":140204,"lt":29},"qwen14-vllm":{"panggilan":27,"token_keluar":10108,"token_masuk":112527,"lt":23}}},"lama":{"n":30,"ok":30,"habis":0,"kosong":0,"galat":0,"v1":27,"v1_pct":90.0,"v2":{"lulus":26,"gagal":3,"sebagian":1},"v2_lulus_pct":86.7,"v2_gagal":3,"v2_sebagian":1,"gagal_detail":[{"kode":"Q4","v2":"gagal","kategori":"tanpa-alat-sop","dtk":19.4,"trace":"a0cbe4db-3587-4643-be22-4223c74a8e1c"},{"kode":"Q5","v2":"gagal","kategori":"pesan-internal","dtk":24.1,"trace":"cdef6b20-b361-49a7-ae40-468f949a5357"},{"kode":"Q8","v2":"gagal","kategori":"pesan-internal","dtk":26.6,"trace":"da455472-55c6-47e2-aafb-5c533d540f98"},{"kode":"Q5","v2":"sebagian","kategori":"penawaran","dtk":25.8,"trace":"0c3565fa-4a84-47a3-a010-18f8f39ee69e"}],"mean":37.0,"p50":32.7,"p90":64.0,"p95":79.9,"p99":91.6,"min":14.6,"max":93.9,"ttft_p50":3.8,"llm_per_wf":3.63,"perute_per_wf":1.93,"token_masuk_per_wf":15065,"token_keluar_per_wf":1366,"token_sampel":29,"delegasi_per_wf":0,"delegasi_ditolak":{},"antre_ms":400.63817921067096,"ttft_vllm_ms":811.0603323770225,"e2e_vllm_ms":9966.913746037613,"preemption":0,"kv_cache":0.8407262219484252,"gpu_util":74.3233137829912,"vram":19521,"watt_total":750.3625219941349,"durasi_dtk":170.869,"wf_per_menit":10.53,"wf_sukses_per_menit":9.13,"biaya_usd":0.377,"usd_per_wf":0.0126,"usd_per_sukses":0.0145,"replika":{"qwen14-gpu1":{"panggilan":24,"token_keluar":8242,"token_masuk":94859,"lt":24},"qwen14-gpu2":{"panggilan":26,"token_keluar":9305,"token_masuk":107937,"lt":26},"qwen14-gpu3":{"panggilan":30,"token_keluar":11649,"token_masuk":119244,"lt":30},"qwen14-vllm":{"panggilan":29,"token_keluar":10792,"token_masuk":121782,"lt":28}}}},{"pengguna":12,"baru":{"n":36,"ok":36,"habis":0,"kosong":0,"galat":0,"v1":33,"v1_pct":91.7,"v2":{"lulus":35,"sebagian":1},"v2_lulus_pct":97.2,"v2_gagal":0,"v2_sebagian":1,"gagal_detail":[{"kode":"Q5","v2":"sebagian","kategori":"penawaran","dtk":19.2,"trace":"65308d7b-8b49-42b1-ac8a-2b6dbd817381"}],"mean":39.9,"p50":36.9,"p90":75.8,"p95":79.1,"p99":100.6,"min":9.9,"max":108.4,"ttft_p50":4.9,"llm_per_wf":3.53,"perute_per_wf":1.75,"token_masuk_per_wf":16146,"token_keluar_per_wf":1302,"token_sampel":22,"delegasi_per_wf":0.89,"delegasi_ditolak":{},"antre_ms":330.3404154488473,"ttft_vllm_ms":690.4775082595705,"e2e_vllm_ms":10805.096909755797,"preemption":0,"kv_cache":0.8860792937347961,"gpu_util":74.20379746835442,"vram":19521,"watt_total":742.2371898734177,"durasi_dtk":197.324,"wf_per_menit":10.95,"wf_sukses_per_menit":10.64,"biaya_usd":0.435,"usd_per_wf":0.0121,"usd_per_sukses":0.0124,"replika":{"qwen14-gpu1":{"panggilan":31,"token_keluar":9396,"token_masuk":123623,"lt":26},"qwen14-gpu2":{"panggilan":32,"token_keluar":12050,"token_masuk":133336,"lt":27},"qwen14-gpu3":{"panggilan":29,"token_keluar":10479,"token_masuk":135798,"lt":27},"qwen14-vllm":{"panggilan":35,"token_keluar":13698,"token_masuk":153937,"lt":31}}},"lama":{"n":36,"ok":35,"habis":1,"kosong":0,"galat":0,"v1":35,"v1_pct":97.2,"v2":{"lulus":34,"gagal":2},"v2_lulus_pct":94.4,"v2_gagal":2,"v2_sebagian":0,"gagal_detail":[{"kode":"Q5","v2":"gagal","kategori":"klaim-tersimpan-palsu","dtk":122.4,"trace":"59ab5925-83d0-43d6-9ab1-0bb350b6a028"},{"kode":"Q5","v2":"gagal","kategori":"timeout","dtk":301.0,"trace":"617e5976-3021-4a9c-aad2-aef0a5a27f3f"}],"mean":52.6,"p50":42.7,"p90":86.0,"p95":99.7,"p99":238.5,"min":10.5,"max":301.0,"ttft_p50":4.4,"llm_per_wf":4.94,"perute_per_wf":2.33,"token_masuk_per_wf":23161,"token_keluar_per_wf":1976,"token_sampel":34,"delegasi_per_wf":0,"delegasi_ditolak":{},"antre_ms":338.5899515168388,"ttft_vllm_ms":706.0148354326741,"e2e_vllm_ms":10375.482090403524,"preemption":0,"kv_cache":0.8799867483529146,"gpu_util":56.09560810810811,"vram":19521,"watt_total":631.0513513513513,"durasi_dtk":369.947,"wf_per_menit":5.84,"wf_sukses_per_menit":5.51,"biaya_usd":0.816,"usd_per_wf":0.0227,"usd_per_sukses":0.024,"replika":{"qwen14-gpu1":{"panggilan":46,"token_keluar":21934,"token_masuk":216835,"lt":45},"qwen14-gpu2":{"panggilan":47,"token_keluar":16200,"token_masuk":212069,"lt":46},"qwen14-gpu3":{"panggilan":43,"token_keluar":15421,"token_masuk":189231,"lt":43},"qwen14-vllm":{"panggilan":42,"token_keluar":15685,"token_masuk":201352,"lt":42}}}},{"pengguna":16,"baru":{"n":48,"ok":48,"habis":0,"kosong":0,"galat":0,"v1":43,"v1_pct":89.6,"v2":{"lulus":46,"gagal":1,"sebagian":1},"v2_lulus_pct":95.8,"v2_gagal":1,"v2_sebagian":1,"gagal_detail":[{"kode":"Q4","v2":"gagal","kategori":"tanpa-alat-sop","dtk":18.0,"trace":"384ac9d8-9c0b-48c0-a20c-3fcbfc7f3d05"},{"kode":"Q5","v2":"sebagian","kategori":"penawaran","dtk":26.7,"trace":"fdd8da66-0df8-4acf-9fea-6dc77a123c39"}],"mean":43.3,"p50":37.8,"p90":73.0,"p95":90.6,"p99":99.2,"min":12.3,"max":99.2,"ttft_p50":6.5,"llm_per_wf":3.38,"perute_per_wf":1.75,"token_masuk_per_wf":14558,"token_keluar_per_wf":1253,"token_sampel":27,"delegasi_per_wf":0.85,"delegasi_ditolak":{"agent-tidak-tersedia":1},"antre_ms":1245.0147589505282,"ttft_vllm_ms":1599.1936907356169,"e2e_vllm_ms":11931.7511835216,"preemption":0,"kv_cache":0.8960491622895344,"gpu_util":86.28686327077747,"vram":19521,"watt_total":820.1964879356568,"durasi_dtk":186.601,"wf_per_menit":15.43,"wf_sukses_per_menit":14.79,"biaya_usd":0.412,"usd_per_wf":0.0086,"usd_per_sukses":0.0089,"replika":{"qwen14-gpu1":{"panggilan":36,"token_keluar":13193,"token_masuk":138523,"lt":29},"qwen14-gpu2":{"panggilan":32,"token_keluar":11950,"token_masuk":139775,"lt":29},"qwen14-gpu3":{"panggilan":49,"token_keluar":14977,"token_masuk":186843,"lt":41},"qwen14-vllm":{"panggilan":45,"token_keluar":13174,"token_masuk":179358,"lt":38}}},"lama":{"n":48,"ok":47,"habis":0,"kosong":1,"galat":0,"v1":46,"v1_pct":95.8,"v2":{"lulus":41,"gagal":5,"sebagian":2},"v2_lulus_pct":85.4,"v2_gagal":5,"v2_sebagian":2,"gagal_detail":[{"kode":"Q4","v2":"gagal","kategori":"tanpa-alat-sop","dtk":22.3,"trace":"8bb3a0ac-8c93-4438-8a34-6d4b18d961f6"},{"kode":"Q8","v2":"gagal","kategori":"pesan-internal","dtk":28.9,"trace":"0957758c-d01b-4959-8610-f5fee26ad1ea"},{"kode":"Q5","v2":"sebagian","kategori":"penawaran","dtk":36.6,"trace":"1d1e7c04-7851-43ee-bb3c-c514cae7fb1e"},{"kode":"Q1","v2":"gagal","kategori":"periode-kosong","dtk":50.3,"trace":"d130aae3-a28b-4b4a-8486-655a266da02c"},{"kode":"Q5","v2":"sebagian","kategori":"penawaran","dtk":47.3,"trace":"c94653cf-f333-4cf2-8a6d-a6c445fda327"},{"kode":"Q5","v2":"gagal","kategori":"klaim-tersimpan-palsu","dtk":125.5,"trace":"76800285-4147-479c-8043-b9f2a69b0701"},{"kode":"Q5","v2":"gagal","kategori":"kosong","dtk":266.5,"trace":"870c581b-e7d2-407f-bb1b-a8ab6273422b"}],"mean":56.1,"p50":42.5,"p90":90.5,"p95":118.9,"p99":200.2,"min":13.3,"max":266.5,"ttft_p50":5.2,"llm_per_wf":4.4,"perute_per_wf":2.17,"token_masuk_per_wf":16002,"token_keluar_per_wf":1510,"token_sampel":40,"delegasi_per_wf":0,"delegasi_ditolak":{},"antre_ms":2356.6150144218946,"ttft_vllm_ms":2713.9937267484256,"e2e_vllm_ms":11863.076773864963,"preemption":0,"kv_cache":0.8829274112453769,"gpu_util":60.7022696929239,"vram":19521,"watt_total":658.657743658211,"durasi_dtk":374.484,"wf_per_menit":7.69,"wf_sukses_per_menit":6.57,"biaya_usd":0.826,"usd_per_wf":0.0172,"usd_per_sukses":0.0201,"replika":{"qwen14-gpu1":{"panggilan":49,"token_keluar":15200,"token_masuk":205748,"lt":47},"qwen14-gpu2":{"panggilan":52,"token_keluar":18091,"token_masuk":225086,"lt":51},"qwen14-gpu3":{"panggilan":51,"token_keluar":16770,"token_masuk":220227,"lt":49},"qwen14-vllm":{"panggilan":59,"token_keluar":25973,"token_masuk":244729,"lt":55}}}},{"pengguna":20,"baru":{"n":60,"ok":60,"habis":0,"kosong":0,"galat":0,"v1":58,"v1_pct":96.7,"v2":{"lulus":55,"gagal":1,"sebagian":4},"v2_lulus_pct":91.7,"v2_gagal":1,"v2_sebagian":4,"gagal_detail":[{"kode":"Q5","v2":"gagal","kategori":"lain","dtk":22.2,"trace":"7ca99286-b377-4fe4-8a8f-292e69989d3b"},{"kode":"Q5","v2":"sebagian","kategori":"penawaran","dtk":29.8,"trace":"c03863a5-0768-4f6f-9d9c-08dc89555fbe"},{"kode":"Q5","v2":"sebagian","kategori":"penawaran","dtk":28.2,"trace":"57652f96-1a65-4937-9eb7-4bba989279de"},{"kode":"Q5","v2":"sebagian","kategori":"penawaran","dtk":30.4,"trace":"8cfe82b7-9a3a-4588-86b3-b3de98bbf924"},{"kode":"Q5","v2":"sebagian","kategori":"penawaran","dtk":56.7,"trace":"a3b710b2-6a30-4edb-a62c-5027c29d6d7d"}],"mean":49.8,"p50":48.8,"p90":84.0,"p95":98.0,"p99":100.0,"min":11.2,"max":100.5,"ttft_p50":7.6,"llm_per_wf":3.38,"perute_per_wf":1.73,"token_masuk_per_wf":14958,"token_keluar_per_wf":1267,"token_sampel":34,"delegasi_per_wf":0.87,"delegasi_ditolak":{},"antre_ms":2986.9050159607204,"ttft_vllm_ms":3364.7708763629935,"e2e_vllm_ms":14118.79875977051,"preemption":0,"kv_cache":0.8887996410049402,"gpu_util":88.90694789081886,"vram":19521,"watt_total":846.0624813895781,"durasi_dtk":201.62,"wf_per_menit":17.86,"wf_sukses_per_menit":16.37,"biaya_usd":0.445,"usd_per_wf":0.0074,"usd_per_sukses":0.0081,"replika":{"qwen14-gpu1":{"panggilan":53,"token_keluar":21451,"token_masuk":238133,"lt":46},"qwen14-gpu2":{"panggilan":39,"token_keluar":12972,"token_masuk":161033,"lt":33},"qwen14-gpu3":{"panggilan":50,"token_keluar":16432,"token_masuk":188391,"lt":40},"qwen14-vllm":{"panggilan":61,"token_keluar":18201,"token_masuk":232189,"lt":51}}},"lama":{"n":60,"ok":59,"habis":0,"kosong":1,"galat":0,"v1":57,"v1_pct":95.0,"v2":{"gagal":5,"lulus":55},"v2_lulus_pct":91.7,"v2_gagal":5,"v2_sebagian":0,"gagal_detail":[{"kode":"Q8","v2":"gagal","kategori":"pesan-internal","dtk":24.8,"trace":"97c580db-35e5-42e3-b238-172cf331c67e"},{"kode":"Q4","v2":"gagal","kategori":"tanpa-alat-sop","dtk":41.1,"trace":"a660496f-5fbe-4f68-8805-0b2c8b014b57"},{"kode":"Q4","v2":"gagal","kategori":"tanpa-alat-sop","dtk":25.4,"trace":"8ee3e38f-e47f-4bfe-b35b-3139604d09b1"},{"kode":"Q8","v2":"gagal","kategori":"pesan-internal","dtk":25.1,"trace":"87545175-5274-47ef-9d88-2dfb51eec363"},{"kode":"Q5","v2":"gagal","kategori":"kosong","dtk":237.9,"trace":"9ae40e56-fe35-438e-a57d-8516a6db0860"}],"mean":56.7,"p50":53.9,"p90":80.1,"p95":94.1,"p99":166.8,"min":12.3,"max":237.9,"ttft_p50":12.2,"llm_per_wf":3.88,"perute_per_wf":2.07,"token_masuk_per_wf":16889,"token_keluar_per_wf":1474,"token_sampel":46,"delegasi_per_wf":0,"delegasi_ditolak":{},"antre_ms":3398.796950502218,"ttft_vllm_ms":3716.212840550959,"e2e_vllm_ms":13318.233987292506,"preemption":0,"kv_cache":0.8956199270774443,"gpu_util":65.88948995363215,"vram":19521,"watt_total":704.2135085007728,"durasi_dtk":323.591,"wf_per_menit":11.13,"wf_sukses_per_menit":10.2,"biaya_usd":0.714,"usd_per_wf":0.0119,"usd_per_sukses":0.013,"replika":{"qwen14-gpu1":{"panggilan":54,"token_keluar":19028,"token_masuk":206174,"lt":50},"qwen14-gpu2":{"panggilan":58,"token_keluar":21036,"token_masuk":233749,"lt":54},"qwen14-gpu3":{"panggilan":62,"token_keluar":22374,"token_masuk":243745,"lt":58},"qwen14-vllm":{"panggilan":59,"token_keluar":19796,"token_masuk":250485,"lt":57}}}}],"kode":{"Q1":{"jenis":"Data penjualan","baru":{"lulus":29,"sebagian":0,"gagal":0},"lama":{"lulus":28,"sebagian":0,"gagal":1},"median_baru":35.0,"median_20":31.3,"median_23":39.9},"Q2":{"jenis":"Peringatan dini","baru":{"lulus":28,"sebagian":0,"gagal":0},"lama":{"lulus":28,"sebagian":0,"gagal":0},"median_baru":84.0,"median_20":65.1,"median_23":82.9},"Q3":{"jenis":"Stok kosong","baru":{"lulus":28,"sebagian":0,"gagal":0},"lama":{"lulus":28,"sebagian":0,"gagal":0},"median_baru":48.4,"median_20":41.3,"median_23":53.5},"Q4":{"jenis":"SOP","baru":{"lulus":28,"sebagian":0,"gagal":1},"lama":{"lulus":24,"sebagian":0,"gagal":5},"median_baru":36.8,"median_20":33.8,"median_23":39.0},"Q5":{"jenis":"Rancangan tiket","baru":{"lulus":18,"sebagian":11,"gagal":1},"lama":{"lulus":18,"sebagian":5,"gagal":7},"median_baru":25.8,"median_20":26.8,"median_23":54.2},"Q6":{"jenis":"Data karyawan","baru":{"lulus":29,"sebagian":0,"gagal":0},"lama":{"lulus":29,"sebagian":0,"gagal":0},"median_baru":54.1,"median_20":38.2,"median_23":49.3},"Q7":{"jenis":"Harus ditolak","baru":{"lulus":29,"sebagian":0,"gagal":0},"lama":{"lulus":29,"sebagian":0,"gagal":0},"median_baru":20.8,"median_20":13.4,"median_23":18.4},"Q8":{"jenis":"Sapaan","baru":{"lulus":29,"sebagian":0,"gagal":0},"lama":{"lulus":23,"sebagian":0,"gagal":6},"median_baru":13.2,"median_20":29.1,"median_23":30.7}},"kode_tahap":[{"tahap":1,"kode":"Q1","jenis":"Data penjualan","n":1,"lulus":1,"sebagian":0,"gagal":0,"p50":23.7,"maks":23.7,"llm":4},{"tahap":1,"kode":"Q7","jenis":"Harus ditolak","n":1,"lulus":1,"sebagian":0,"gagal":0,"p50":14.1,"maks":14.1,"llm":3},{"tahap":1,"kode":"Q8","jenis":"Sapaan","n":1,"lulus":1,"sebagian":0,"gagal":0,"p50":9.5,"maks":9.5,"llm":1},{"tahap":2,"kode":"Q1","jenis":"Data penjualan","n":1,"lulus":1,"sebagian":0,"gagal":0,"p50":22.3,"maks":22.3,"llm":4},{"tahap":2,"kode":"Q2","jenis":"Peringatan dini","n":1,"lulus":1,"sebagian":0,"gagal":0,"p50":48.6,"maks":48.6,"llm":4},{"tahap":2,"kode":"Q3","jenis":"Stok kosong","n":1,"lulus":1,"sebagian":0,"gagal":0,"p50":47.9,"maks":47.9,"llm":4},{"tahap":2,"kode":"Q4","jenis":"SOP","n":1,"lulus":1,"sebagian":0,"gagal":0,"p50":46.8,"maks":46.8,"llm":4},{"tahap":2,"kode":"Q5","jenis":"Rancangan tiket","n":1,"lulus":1,"sebagian":0,"gagal":0,"p50":19.8,"maks":19.8,"llm":4},{"tahap":2,"kode":"Q8","jenis":"Sapaan","n":1,"lulus":1,"sebagian":0,"gagal":0,"p50":10.8,"maks":10.8,"llm":1},{"tahap":3,"kode":"Q1","jenis":"Data penjualan","n":1,"lulus":1,"sebagian":0,"gagal":0,"p50":26.4,"maks":26.4,"llm":4},{"tahap":3,"kode":"Q2","jenis":"Peringatan dini","n":1,"lulus":1,"sebagian":0,"gagal":0,"p50":74.9,"maks":74.9,"llm":4},{"tahap":3,"kode":"Q3","jenis":"Stok kosong","n":1,"lulus":1,"sebagian":0,"gagal":0,"p50":38.9,"maks":38.9,"llm":4},{"tahap":3,"kode":"Q4","jenis":"SOP","n":1,"lulus":1,"sebagian":0,"gagal":0,"p50":32.7,"maks":32.7,"llm":4},{"tahap":3,"kode":"Q5","jenis":"Rancangan tiket","n":1,"lulus":0,"sebagian":1,"gagal":0,"p50":16.5,"maks":16.5,"llm":3},{"tahap":3,"kode":"Q6","jenis":"Data karyawan","n":2,"lulus":2,"sebagian":0,"gagal":0,"p50":45.1,"maks":52.1,"llm":4},{"tahap":3,"kode":"Q7","jenis":"Harus ditolak","n":1,"lulus":1,"sebagian":0,"gagal":0,"p50":17.6,"maks":17.6,"llm":3},{"tahap":3,"kode":"Q8","jenis":"Sapaan","n":1,"lulus":1,"sebagian":0,"gagal":0,"p50":12.7,"maks":12.7,"llm":1},{"tahap":5,"kode":"Q1","jenis":"Data penjualan","n":2,"lulus":2,"sebagian":0,"gagal":0,"p50":30.0,"maks":30.2,"llm":4},{"tahap":5,"kode":"Q2","jenis":"Peringatan dini","n":2,"lulus":2,"sebagian":0,"gagal":0,"p50":73.9,"maks":85.7,"llm":4},{"tahap":5,"kode":"Q3","jenis":"Stok kosong","n":2,"lulus":2,"sebagian":0,"gagal":0,"p50":42.0,"maks":44.4,"llm":4},{"tahap":5,"kode":"Q4","jenis":"SOP","n":2,"lulus":2,"sebagian":0,"gagal":0,"p50":36.1,"maks":38.1,"llm":4},{"tahap":5,"kode":"Q5","jenis":"Rancangan tiket","n":2,"lulus":2,"sebagian":0,"gagal":0,"p50":21.8,"maks":22.9,"llm":3.5},{"tahap":5,"kode":"Q6","jenis":"Data karyawan","n":2,"lulus":2,"sebagian":0,"gagal":0,"p50":37.3,"maks":47.3,"llm":4},{"tahap":5,"kode":"Q7","jenis":"Harus ditolak","n":2,"lulus":2,"sebagian":0,"gagal":0,"p50":13.6,"maks":16.1,"llm":3},{"tahap":5,"kode":"Q8","jenis":"Sapaan","n":1,"lulus":1,"sebagian":0,"gagal":0,"p50":14.1,"maks":14.1,"llm":1},{"tahap":8,"kode":"Q1","jenis":"Data penjualan","n":3,"lulus":3,"sebagian":0,"gagal":0,"p50":29.6,"maks":35.0,"llm":4},{"tahap":8,"kode":"Q2","jenis":"Peringatan dini","n":3,"lulus":3,"sebagian":0,"gagal":0,"p50":74.8,"maks":88.0,"llm":4},{"tahap":8,"kode":"Q3","jenis":"Stok kosong","n":3,"lulus":3,"sebagian":0,"gagal":0,"p50":44.6,"maks":68.1,"llm":4},{"tahap":8,"kode":"Q4","jenis":"SOP","n":3,"lulus":3,"sebagian":0,"gagal":0,"p50":32.6,"maks":34.3,"llm":4.33},{"tahap":8,"kode":"Q5","jenis":"Rancangan tiket","n":3,"lulus":1,"sebagian":2,"gagal":0,"p50":19.8,"maks":21.5,"llm":3},{"tahap":8,"kode":"Q6","jenis":"Data karyawan","n":3,"lulus":3,"sebagian":0,"gagal":0,"p50":47.8,"maks":56.1,"llm":4},{"tahap":8,"kode":"Q7","jenis":"Harus ditolak","n":3,"lulus":3,"sebagian":0,"gagal":0,"p50":16.1,"maks":19.0,"llm":3},{"tahap":8,"kode":"Q8","jenis":"Sapaan","n":3,"lulus":3,"sebagian":0,"gagal":0,"p50":13.2,"maks":13.8,"llm":1},{"tahap":10,"kode":"Q1","jenis":"Data penjualan","n":4,"lulus":4,"sebagian":0,"gagal":0,"p50":36.2,"maks":45.8,"llm":4},{"tahap":10,"kode":"Q2","jenis":"Peringatan dini","n":3,"lulus":3,"sebagian":0,"gagal":0,"p50":71.5,"maks":86.4,"llm":4},{"tahap":10,"kode":"Q3","jenis":"Stok kosong","n":3,"lulus":3,"sebagian":0,"gagal":0,"p50":53.9,"maks":56.1,"llm":4},{"tahap":10,"kode":"Q4","jenis":"SOP","n":4,"lulus":4,"sebagian":0,"gagal":0,"p50":39.9,"maks":55.0,"llm":4},{"tahap":10,"kode":"Q5","jenis":"Rancangan tiket","n":4,"lulus":2,"sebagian":2,"gagal":0,"p50":23.4,"maks":36.4,"llm":3.5},{"tahap":10,"kode":"Q6","jenis":"Data karyawan","n":4,"lulus":4,"sebagian":0,"gagal":0,"p50":52.6,"maks":54.7,"llm":4},{"tahap":10,"kode":"Q7","jenis":"Harus ditolak","n":4,"lulus":4,"sebagian":0,"gagal":0,"p50":20.7,"maks":26.4,"llm":3},{"tahap":10,"kode":"Q8","jenis":"Sapaan","n":4,"lulus":4,"sebagian":0,"gagal":0,"p50":11.5,"maks":23.2,"llm":1},{"tahap":12,"kode":"Q1","jenis":"Data penjualan","n":4,"lulus":4,"sebagian":0,"gagal":0,"p50":34.7,"maks":45.2,"llm":4},{"tahap":12,"kode":"Q2","jenis":"Peringatan dini","n":5,"lulus":5,"sebagian":0,"gagal":0,"p50":76.8,"maks":108.4,"llm":4},{"tahap":12,"kode":"Q3","jenis":"Stok kosong","n":5,"lulus":5,"sebagian":0,"gagal":0,"p50":44.7,"maks":48.8,"llm":4},{"tahap":12,"kode":"Q4","jenis":"SOP","n":5,"lulus":5,"sebagian":0,"gagal":0,"p50":36.2,"maks":39.7,"llm":4},{"tahap":12,"kode":"Q5","jenis":"Rancangan tiket","n":5,"lulus":4,"sebagian":1,"gagal":0,"p50":24.8,"maks":47.1,"llm":3.8},{"tahap":12,"kode":"Q6","jenis":"Data karyawan","n":4,"lulus":4,"sebagian":0,"gagal":0,"p50":51.2,"maks":61.4,"llm":4},{"tahap":12,"kode":"Q7","jenis":"Harus ditolak","n":4,"lulus":4,"sebagian":0,"gagal":0,"p50":20.4,"maks":24.2,"llm":3},{"tahap":12,"kode":"Q8","jenis":"Sapaan","n":4,"lulus":4,"sebagian":0,"gagal":0,"p50":11.2,"maks":12.8,"llm":1},{"tahap":16,"kode":"Q1","jenis":"Data penjualan","n":6,"lulus":6,"sebagian":0,"gagal":0,"p50":36.5,"maks":47.4,"llm":4},{"tahap":16,"kode":"Q2","jenis":"Peringatan dini","n":6,"lulus":6,"sebagian":0,"gagal":0,"p50":87.5,"maks":99.2,"llm":4},{"tahap":16,"kode":"Q3","jenis":"Stok kosong","n":6,"lulus":6,"sebagian":0,"gagal":0,"p50":49.3,"maks":86.8,"llm":4},{"tahap":16,"kode":"Q4","jenis":"SOP","n":6,"lulus":5,"sebagian":0,"gagal":1,"p50":36.8,"maks":46.7,"llm":3.67},{"tahap":16,"kode":"Q5","jenis":"Rancangan tiket","n":6,"lulus":5,"sebagian":1,"gagal":0,"p50":31.8,"maks":42.2,"llm":3.33},{"tahap":16,"kode":"Q6","jenis":"Data karyawan","n":6,"lulus":6,"sebagian":0,"gagal":0,"p50":58.5,"maks":63.0,"llm":4},{"tahap":16,"kode":"Q7","jenis":"Harus ditolak","n":6,"lulus":6,"sebagian":0,"gagal":0,"p50":25.5,"maks":29.0,"llm":3},{"tahap":16,"kode":"Q8","jenis":"Sapaan","n":6,"lulus":6,"sebagian":0,"gagal":0,"p50":16.7,"maks":25.6,"llm":1},{"tahap":20,"kode":"Q1","jenis":"Data penjualan","n":7,"lulus":7,"sebagian":0,"gagal":0,"p50":53.3,"maks":76.1,"llm":4},{"tahap":20,"kode":"Q2","jenis":"Peringatan dini","n":7,"lulus":7,"sebagian":0,"gagal":0,"p50":98.0,"maks":100.5,"llm":4},{"tahap":20,"kode":"Q3","jenis":"Stok kosong","n":7,"lulus":7,"sebagian":0,"gagal":0,"p50":60.7,"maks":70.8,"llm":4},{"tahap":20,"kode":"Q4","jenis":"SOP","n":7,"lulus":7,"sebagian":0,"gagal":0,"p50":50.6,"maks":69.4,"llm":4},{"tahap":20,"kode":"Q5","jenis":"Rancangan tiket","n":8,"lulus":3,"sebagian":4,"gagal":1,"p50":37.5,"maks":56.9,"llm":3.38},{"tahap":20,"kode":"Q6","jenis":"Data karyawan","n":8,"lulus":8,"sebagian":0,"gagal":0,"p50":70.9,"maks":83.5,"llm":4},{"tahap":20,"kode":"Q7","jenis":"Harus ditolak","n":8,"lulus":8,"sebagian":0,"gagal":0,"p50":23.2,"maks":39.0,"llm":3},{"tahap":20,"kode":"Q8","jenis":"Sapaan","n":8,"lulus":8,"sebagian":0,"gagal":0,"p50":17.0,"maks":27.6,"llm":1}],"rute":{"q1":{"periode_sesuai":29,"ada_panggilan_tanpa_periode":0,"perlu_periode_ditolak":0,"periode_otomatis_ditandai":0,"angka_benar":29,"argumen_tercatat":29,"n":29},"q4":{"pemegang_dokumen":["Ratu AI Admin","Ratu AI Portal"],"pilihan_pertama":{"Ratu AI Portal":28,"Ratu AI Approval":1},"first_choice_acc_pct":96.6,"effective_acc_pct":96.6,"dialihkan":0,"koreksi_rate_pct":0.0,"agent_tidak_relevan_dieksekusi":0,"cari_sop_pct":96.6,"final_lulus_pct":96.6,"fallback_batas":0,"status_handoff":{"perlu-pengguna":28},"n":29,"first_n":28,"base_first":"18/22 (82%) ke pemegang SOP; 4× ke Super Tools"},"q5":{"persetujuan_karangan_ditolak":0,"delegasi_berulang_ditolak":0,"alat_berulang":0,"rancangan_ganda":0,"rancangan_ada":0,"kosong":0,"timeout":0,"klaim_tersimpan_palsu":0,"pesan_internal":0,"berhenti_hitl":{"klarifikasi":19,"tawaran":11},"sub_dikosongkan":4,"delegasi_maks":1},"q8":{"langsung_tanpa_delegasi":29,"efisien":29,"efisien_pct":100.0,"alat_dipanggil":0,"teks_alat_bocor":0,"sapaan_ditolak_penjaga":0,"median_dtk":13.2,"n":29,"base_efisien":"21/29"}},"orkes":{"n":231,"llm":3.42,"perute":1.75,"bawahan":1.67,"delegasi":0.87,"ditolak":{"menunggu-pengguna":9,"agent-tidak-tersedia":1},"ditolak_total":10},"total":{"baru":{"n":231,"lulus":218,"lulus_pct":94.4,"gagal":2,"sebagian":11,"habis":0,"durasi":1439,"biaya":3.17,"usd_sukses":0.0146,"llm":3.42,"p99_20":100.0,"p99_tinggi":100.6},"lama":{"n":231,"lulus":207,"lulus_pct":89.6,"gagal":19,"sebagian":5,"habis":1,"durasi":1920,"biaya":4.24,"usd_sukses":0.0205,"llm":4.08,"p99_20":166.8,"p99_tinggi":238.5}},"gagal":[{"tahap":16,"kode":"Q4","v2":"gagal","kategori":"tanpa-alat-sop","dtk":18.0,"alat":[],"pertama":"Ratu AI Approval","efektif":[],"ditolak":["agent-tidak-tersedia"],"berhenti":null,"trace":"384ac9d8-9c0b-48c0-a20c-3fcbfc7f3d05"},{"tahap":20,"kode":"Q5","v2":"gagal","kategori":"lain","dtk":22.2,"alat":["buat_tiket"],"pertama":"Ratu AI Portal","efektif":["Ratu AI Portal"],"ditolak":[],"berhenti":"klarifikasi","trace":"7ca99286-b377-4fe4-8a8f-292e69989d3b"},{"tahap":3,"kode":"Q5","v2":"sebagian","kategori":"penawaran","dtk":16.5,"alat":["cari_sop"],"pertama":"Ratu AI Portal","efektif":["Ratu AI Portal"],"ditolak":[],"berhenti":"tawaran","trace":"1abd3b6c-6871-4b75-8229-ead8eb674792"},{"tahap":8,"kode":"Q5","v2":"sebagian","kategori":"penawaran","dtk":21.5,"alat":["cari_sop"],"pertama":"Ratu AI Portal","efektif":["Ratu AI Portal"],"ditolak":[],"berhenti":"tawaran","trace":"d93361df-c47f-4da9-8dcc-7c9b83c0c029"},{"tahap":8,"kode":"Q5","v2":"sebagian","kategori":"penawaran","dtk":16.9,"alat":["cari_sop"],"pertama":"Ratu AI Portal","efektif":["Ratu AI Portal"],"ditolak":[],"berhenti":"tawaran","trace":"799fae25-3565-45d0-8a5f-773140f85f87"},{"tahap":10,"kode":"Q5","v2":"sebagian","kategori":"penawaran","dtk":23.0,"alat":["cari_sop"],"pertama":"Ratu AI Portal","efektif":["Ratu AI Portal"],"ditolak":[],"berhenti":"tawaran","trace":"2fe3f4bd-ed91-4960-933e-56ab2238e647"},{"tahap":10,"kode":"Q5","v2":"sebagian","kategori":"penawaran","dtk":23.8,"alat":["cari_sop"],"pertama":"Ratu AI Portal","efektif":["Ratu AI Portal"],"ditolak":[],"berhenti":"tawaran","trace":"fcf8a636-7e4f-480a-8194-5b1dbd199b81"},{"tahap":12,"kode":"Q5","v2":"sebagian","kategori":"penawaran","dtk":19.2,"alat":["cari_sop"],"pertama":"Ratu AI Portal","efektif":["Ratu AI Portal"],"ditolak":[],"berhenti":"tawaran","trace":"65308d7b-8b49-42b1-ac8a-2b6dbd817381"},{"tahap":16,"kode":"Q5","v2":"sebagian","kategori":"penawaran","dtk":26.7,"alat":["cari_sop"],"pertama":"Ratu AI Portal","efektif":["Ratu AI Portal"],"ditolak":[],"berhenti":"tawaran","trace":"fdd8da66-0df8-4acf-9fea-6dc77a123c39"},{"tahap":20,"kode":"Q5","v2":"sebagian","kategori":"penawaran","dtk":29.8,"alat":["cari_sop"],"pertama":"Ratu AI Portal","efektif":["Ratu AI Portal"],"ditolak":[],"berhenti":"tawaran","trace":"c03863a5-0768-4f6f-9d9c-08dc89555fbe"},{"tahap":20,"kode":"Q5","v2":"sebagian","kategori":"penawaran","dtk":28.2,"alat":["cari_sop"],"pertama":"Ratu AI Portal","efektif":["Ratu AI Portal"],"ditolak":[],"berhenti":"tawaran","trace":"57652f96-1a65-4937-9eb7-4bba989279de"},{"tahap":20,"kode":"Q5","v2":"sebagian","kategori":"penawaran","dtk":30.4,"alat":["cari_sop"],"pertama":"Ratu AI Portal","efektif":["Ratu AI Portal"],"ditolak":[],"berhenti":"tawaran","trace":"8cfe82b7-9a3a-4588-86b3-b3de98bbf924"},{"tahap":20,"kode":"Q5","v2":"sebagian","kategori":"penawaran","dtk":56.7,"alat":["cari_sop"],"pertama":"Ratu AI Portal","efektif":["Ratu AI Portal"],"ditolak":[],"berhenti":"tawaran","trace":"a3b710b2-6a30-4edb-a62c-5027c29d6d7d"}],"rca":[{"kelas":"","judul":"F1 — Q4, 16 pengguna (gagal, output menyesatkan) · capability routing + model","isi":["Perute mendelegasikan prosedur cuti ke Ratu AI Approval, agent yang tercantum di daftar tetapi tidak punya alat terpasang untuk akun uji.","Penjaga Tahap 3 menolak (agent-tidak-tersedia) tanpa menyarankan pemegang SOP; perute lalu menjawab sendiri bahwa kemampuan SOP 'belum tersedia', padahal Portal dan Admin memegang cari_sop.","Usulan (perlu persetujuan): saat target tidak tersedia dan kebutuhan 'dokumen' jelas, alihkan ke pemegang dokumen seperti pada kasus tidak-cocok."]},{"kelas":"ev","judul":"F2 — Q5, 20 pengguna (gagal 'lain') · salah nilai evaluator","isi":["Alat menolak kategori karangan ('Jaringan'); agent lalu bertanya apakah memakai kategori NETWORK sambil menampilkan daftar kategori sah dari database.","Perilakunya benar (klarifikasi), tetapi pola evaluator v2 tidak mengenali kalimat 'Pilihan kategori…'. Evaluator tidak diubah; kalau dihitung manual Q5 = 19 lulus / 11 sebagian / 0 gagal."]},{"kelas":"ev","judul":"F3 — Q5 'sebagian' 11/30 · model + instruksi agent","isi":["Portal mencari SOP, tidak menemukan panduan, lalu menawarkan tiket alih-alih langsung menyusun rancangan — padahal pengguna sudah meminta 'Buatkan tiket'.","Penjaga menghentikan alur dengan benar untuk menunggu jawaban (HITL); tidak ada persetujuan karangan, klaim tersimpan, atau tiket tersimpan. Satu giliran terbuang."]}]};
+const $ = (s, r = document) => r.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const f1 = (v) => v == null ? "—" : Number(v).toLocaleString("id-ID", { maximumFractionDigits: 1, minimumFractionDigits: 1 });
+const f0 = (v) => v == null ? "—" : Math.round(v).toLocaleString("id-ID");
+const f2 = (v) => v == null ? "—" : Number(v).toLocaleString("id-ID", { maximumFractionDigits: 2, minimumFractionDigits: 2 });
+const usd = (v, d = 4) => v == null ? "—" : "$" + Number(v).toLocaleString("en-US", { maximumFractionDigits: d, minimumFractionDigits: d });
+const pct = (v) => v == null ? "—" : f1(v) + "%";
+const TAHAP = DATA.tahap.map((t) => t.pengguna);
+
+/* ---------------- tooltip ---------------- */
+const tip = $("#tip");
+function tampilTip(e, teks) { tip.textContent = teks; tip.style.display = "block"; const w = tip.offsetWidth, h = tip.offsetHeight;
+  let x = e.clientX + 14, y = e.clientY + 14; if (x + w > innerWidth - 8) x = e.clientX - w - 14; if (y + h > innerHeight - 8) y = e.clientY - h - 14;
+  tip.style.left = x + "px"; tip.style.top = y + "px"; }
+function sembunyiTip() { tip.style.display = "none"; }
+function pasangTip(root) { root.querySelectorAll("[data-tip]").forEach((el) => {
+  el.addEventListener("mousemove", (e) => tampilTip(e, el.dataset.tip)); el.addEventListener("mouseleave", sembunyiTip);
+  el.addEventListener("focus", (e) => { const r = el.getBoundingClientRect(); tampilTip({ clientX: r.right, clientY: r.top }, el.dataset.tip); });
+  el.addEventListener("blur", sembunyiTip); }); }
+
+/* ---------------- grafik garis (sumbu x kategori = jumlah pengguna) ---------------- */
+function garis(el, o) {
+  const W = 720, H = o.h || 260, L = 52, R = 16, T = 14, B = 38, iw = W - L - R, ih = H - T - B;
+  const xs = o.x, n = xs.length, px = (i) => L + (n === 1 ? iw / 2 : (i * iw) / (n - 1));
+  const semua = o.seri.flatMap((s) => s.v.filter((v) => v != null));
+  const maks = (o.ymax ?? Math.max(...semua, 0)) * 1.08 || 1, py = (v) => T + ih - (v / maks) * ih;
+  const langkah = maks / 4;
+  let g = "";
+  for (let i = 0; i <= 4; i++) { const v = langkah * i, y = py(v); g += `<line class="gl" x1="${L}" x2="${W - R}" y1="${y}" y2="${y}"/><text class="ax" x="${L - 8}" y="${y + 4}" text-anchor="end">${o.fmt ? o.fmt(v) : f0(v)}</text>`; }
+  xs.forEach((x, i) => { g += `<text class="ax" x="${px(i)}" y="${H - B + 18}" text-anchor="middle">${x}</text>`; });
+  g += `<text class="axt" x="${L + iw / 2}" y="${H - 4}" text-anchor="middle">${esc(o.xlabel || "pengguna bersamaan")}</text>`;
+  g += `<text class="axt" x="12" y="${T + ih / 2}" text-anchor="middle" transform="rotate(-90 12 ${T + ih / 2})">${esc(o.ylabel || "")}</text>`;
+  for (const s of o.seri) {
+    let d = "", mulai = true;
+    s.v.forEach((v, i) => { if (v == null) { mulai = true; return; } d += `${mulai ? "M" : "L"}${px(i)},${py(v)}`; mulai = false; });
+    g += `<path d="${d}" fill="none" stroke="${s.warna}" stroke-width="2" ${s.putus ? 'stroke-dasharray="5 4"' : ""} stroke-linejoin="round"/>`;
+    s.v.forEach((v, i) => { if (v == null) return;
+      g += `<circle class="pt" tabindex="0" cx="${px(i)}" cy="${py(v)}" r="4.5" fill="${s.warna}" stroke="var(--surface)" stroke-width="2" data-tip="${esc(`${s.nama} · ${xs[i]} pengguna\n${o.ylabel}: ${o.fmt ? o.fmt(v) : f1(v)}`)}"/>`; });
+  }
+  el.innerHTML = `<div class="leg">${o.seri.map((s) => `<span><i class="dot" style="background:${s.warna}${s.putus ? ";opacity:.6" : ""}"></i>${esc(s.nama)}</span>`).join("")}</div>
+    <div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(o.judul || o.ylabel)}">${g}</svg></div>`;
+  pasangTip(el);
+}
+
+/* ---------------- batang bertumpuk horizontal (lulus/sebagian/gagal) ---------------- */
+function tumpuk(el, baris) {
+  const W = 720, tinggi = 22, jarak = 10, L = 150, R = 60, H = baris.length * (tinggi + jarak) + 10, iw = W - L - R;
+  let g = "";
+  baris.forEach((b, i) => {
+    const y = 4 + i * (tinggi + jarak), n = b.lulus + b.sebagian + b.gagal || 1; let x = L;
+    g += `<text class="axt" x="${L - 10}" y="${y + tinggi / 2 + 4}" text-anchor="end">${esc(b.label)}</text>`;
+    for (const k of ["lulus", "sebagian", "gagal"]) { const w = (b[k] / n) * iw; if (b[k] > 0) {
+      g += `<rect class="pt s-${k}" tabindex="0" x="${x}" y="${y}" width="${Math.max(w - 2, 1)}" height="${tinggi}" rx="4" data-tip="${esc(`${b.label}\n${k}: ${b[k]} dari ${n}`)}"/>`;
+      if (w > 26) g += `<text x="${x + w / 2 - 1}" y="${y + tinggi / 2 + 4}" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">${b[k]}</text>`; } x += w; }
+    g += `<text class="ax" x="${W - R + 8}" y="${y + tinggi / 2 + 4}">${f1((100 * b.lulus) / n)}%</text>`;
+  });
+  el.innerHTML = `<div class="leg"><span><i class="dot" style="background:var(--good)"></i>lulus</span><span><i class="dot" style="background:var(--warn)"></i>sebagian</span><span><i class="dot" style="background:var(--bad)"></i>gagal</span><span class="mini">angka di kanan = % lulus v2</span></div>
+    <div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Hasil evaluator v2">${g}</svg></div>`;
+  pasangTip(el);
+}
+
+/* ---------------- batang berpasangan vertikal (baseline vs baru) ---------------- */
+function pasangan(el, o) {
+  const W = 720, H = 240, L = 46, R = 12, T = 14, B = 38, iw = W - L - R, ih = H - T - B, n = o.x.length, slot = iw / n, bw = Math.min(22, slot / 3);
+  const maks = Math.max(...o.lama.concat(o.baru).filter((v) => v != null), 1) * 1.15, py = (v) => T + ih - (v / maks) * ih;
+  let g = "";
+  for (let i = 0; i <= 4; i++) { const y = py((maks / 4) * i); g += `<line class="gl" x1="${L}" x2="${W - R}" y1="${y}" y2="${y}"/><text class="ax" x="${L - 8}" y="${y + 4}" text-anchor="end">${f0((maks / 4) * i)}</text>`; }
+  o.x.forEach((x, i) => { const cx = L + slot * i + slot / 2;
+    for (const [k, dx, kelas] of [["lama", -bw - 1, "bar-lama"], ["baru", 1, "bar-baru"]]) { const v = o[k][i]; if (v == null) continue;
+      const y = py(v), h = Math.max(T + ih - y, v > 0 ? 2 : 0);
+      g += `<rect class="pt ${kelas}" tabindex="0" x="${cx + dx}" y="${T + ih - h}" width="${bw}" height="${h}" rx="3" data-tip="${esc(`${x} pengguna · ${k === "lama" ? "sebelum optimasi" : "sesudah"}\n${o.label}: ${o.fmt ? o.fmt(v) : v}`)}"/>`;
+      if (v > 0) g += `<text class="el" x="${cx + dx + bw / 2}" y="${T + ih - h - 4}" text-anchor="middle">${o.fmt ? o.fmt(v) : v}</text>`; }
+    g += `<text class="ax" x="${cx}" y="${H - B + 18}" text-anchor="middle">${x}</text>`; });
+  g += `<text class="axt" x="${L + iw / 2}" y="${H - 4}" text-anchor="middle">pengguna bersamaan</text>`;
+  el.innerHTML = `<div class="leg"><span><i class="dot" style="background:var(--ink3);opacity:.55"></i>sebelum optimasi (20 &amp; 23 Nov)</span><span><i class="dot" style="background:var(--accent)"></i>sesudah (24 Nov)</span></div>
+    <div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(o.label)}">${g}</svg></div>`;
+  pasangTip(el);
+}
+
+/* ---------------- tabel bisa diurutkan ---------------- */
+function tabel(el, kolom, baris, o = {}) {
+  let urut = null, arah = 1;
+  const gambar = () => {
+    let b = [...baris]; if (urut != null) b.sort((p, q) => { const a = p[urut], c = q[urut]; return (a > c ? 1 : a < c ? -1 : 0) * arah; });
+    el.innerHTML = `<div class="tw"><table><thead><tr>${kolom.map((k, i) => `<th class="${k.num ? "num" : ""}" ${urut === k.id ? `aria-sort="${arah > 0 ? "ascending" : "descending"}"` : ""}><button type="button" data-i="${i}">${esc(k.label)}</button></th>`).join("")}</tr></thead>
+      <tbody>${b.map((r) => `<tr>${kolom.map((k) => `<td class="${k.num ? "num" : ""} ${k.wrap ? "wrap" : ""}">${k.f ? k.f(r[k.id], r) : esc(r[k.id])}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+      ${o.cat ? `<p class="mini">${o.cat}</p>` : ""}`;
+    el.querySelectorAll("th button").forEach((bt) => bt.addEventListener("click", () => { const k = kolom[bt.dataset.i].id; arah = urut === k ? -arah : 1; urut = k; gambar(); }));
+  };
+  gambar();
+}
+const delta = (lama, baru, lebihKecilBaik = true, f = f1) => {
+  if (lama == null || baru == null) return "";
+  const baik = lebihKecilBaik ? baru < lama : baru > lama, sama = Math.abs(baru - lama) < 1e-9;
+  return `<span class="delta ${sama ? "netral" : baik ? "good" : "bad"}">${f(lama)} → ${f(baru)}</span>`;
+};
+const kpi = (l, v, k, d = "") => `<div class="kpi"><span class="l">${l}</span><span class="v">${v}</span><span class="k">${k}</span>${d}</div>`;
+
+/* ================================================================ RINGKASAN */
+function vRingkas() {
+  const S = DATA.total;
+  $("#v-ringkas").innerHTML = `<h2 style="margin-top:0">Apa hasil perbaikan workflow agent?</h2>
+    <div class="card hero"><p><b>Pada konfigurasi inference yang sama persis</b>, perbaikan software Tahap 1–6 menurunkan kegagalan workflow dari
+      <b>${S.lama.gagal}</b> menjadi <b>${S.baru.gagal}</b> (evaluator v2, ${S.baru.n} pertanyaan terukur, 1–20 pengguna), tanpa habis waktu, tanpa galat, dan tanpa tiket tersimpan.
+      Ekor latensi di 12–20 pengguna turun dari ±${f0(S.lama.p99_tinggi)} dtk menjadi ±${f0(S.baru.p99_tinggi)} dtk.</p>
+      <p class="batas">Satu kali jalan per tingkat konkurensi; sampel 1–8 pengguna kecil (3–24 pertanyaan). Baseline: 1–8 pengguna = 20 Nov, 10–20 pengguna = 23 Nov. Detail keterbandingan di Metodologi.</p></div>
+    <div class="kpis">
+      ${kpi("Lulus evaluator v2", pct(S.baru.lulus_pct), `${S.baru.lulus} dari ${S.baru.n} pertanyaan`, delta(S.lama.lulus_pct, S.baru.lulus_pct, false, (v) => f1(v) + "%"))}
+      ${kpi("Gagal evaluator v2", S.baru.gagal, `sebagian ${S.baru.sebagian} · baseline sebagian ${S.lama.sebagian}`, delta(S.lama.gagal, S.baru.gagal, true, f0))}
+      ${kpi("Habis waktu / galat / kosong", `${S.baru.habis} / 0 / 0`, "batas 300 dtk", delta(S.lama.habis, S.baru.habis, true, f0))}
+      ${kpi("P99 latensi, 20 pengguna", f1(S.baru.p99_20) + "<small>dtk</small>", "pertanyaan paling lambat 1%", delta(S.lama.p99_20, S.baru.p99_20))}
+      ${kpi("Panggilan LLM per workflow", f2(S.baru.llm), "rata-rata semua tahap", delta(S.lama.llm, S.baru.llm, true, f2))}
+      ${kpi("Biaya per workflow sukses", usd(S.baru.usd_sukses), `tarif $${DATA.meta.tarif}/jam`, delta(S.lama.usd_sukses, S.baru.usd_sukses, true, (v) => usd(v)))}
+    </div>
+    <div class="grid2">
+      <div class="card"><h3>Berapa yang gagal, sebelum vs sesudah perbaikan</h3><p class="ket">Jumlah pertanyaan yang dinilai gagal oleh evaluator v2 di tiap tahap.</p><div id="c-gagal"></div></div>
+      <div class="card"><h3>Waktu jawab 95% pertanyaan (P95)</h3><p class="ket">Detik sampai jawaban selesai; 95% pertanyaan lebih cepat dari ini.</p><div id="c-p95"></div></div>
+    </div>
+    <div class="card"><h3>Sesuai kriteria per jenis pertanyaan (1–20 pengguna)</h3><p class="ket">Baris atas tiap kode = sebelum optimasi, baris bawah = sesudah.</p><div id="c-kode-ringkas"></div>
+      <p class="interpret"><b>Yang paling berubah:</b> Q8 sapaan (gagal 6 → 0, median ±30 → 13 dtk), Q5 tiket (gagal 7 → 1), Q4 SOP (gagal 5 → 1). Q2, Q3, Q6, Q7 tetap 100%.</p></div>`;
+  pasangan($("#c-gagal"), { x: TAHAP, lama: DATA.tahap.map((t) => t.lama?.v2_gagal ?? null), baru: DATA.tahap.map((t) => t.baru.v2_gagal), label: "gagal v2" });
+  garis($("#c-p95"), { x: TAHAP, ylabel: "P95 (dtk)", fmt: f1, seri: [
+    { nama: "sebelum optimasi", warna: "var(--ink3)", putus: true, v: DATA.tahap.map((t) => t.lama?.p95 ?? null) },
+    { nama: "sesudah", warna: "var(--accent)", v: DATA.tahap.map((t) => t.baru.p95) }] });
+  tumpuk($("#c-kode-ringkas"), Object.entries(DATA.kode).flatMap(([k, o]) => [
+    { label: `${k} sebelum`, ...o.lama }, { label: `${k} sesudah`, ...o.baru }]));
+}
+
+/* ================================================================ PER TAHAP */
+let pilihTahap = "semua", pilihPersen = "p95";
+function vTahap() {
+  const v = $("#v-tahap");
+  v.innerHTML = `<h2 style="margin-top:0">Berapa lama menjawab saat ramai?</h2><p class="lead">Tiap pengguna mengirim 3 pertanyaan berurutan (jeda 5 dtk); urutan pertanyaan sama dengan uji sebelum perbaikan (seed tetap). P50 = waktu tengah, P95/P99 = 95%/99% pertanyaan lebih cepat dari angka itu.</p>
+    <div class="ctl"><span class="lbl">Tahap</span><div class="seg" id="seg-tahap">${["semua", ...TAHAP].map((t) => `<button type="button" data-t="${t}" aria-pressed="${String(t) === String(pilihTahap)}">${t === "semua" ? "Semua" : t + " pengguna"}</button>`).join("")}</div></div>
+    <div class="card"><h3>Waktu jawab per jumlah pengguna</h3>
+      <div class="ctl"><span class="lbl">Persentil</span><div class="seg" id="seg-p">${["p50", "p95", "p99"].map((p) => `<button type="button" data-p="${p}" aria-pressed="${p === pilihPersen}">${p.toUpperCase()}</button>`).join("")}</div></div>
+      <div id="c-lat"></div></div>
+    <div class="card" id="k-tahap"></div>`;
+  v.querySelectorAll("#seg-tahap button").forEach((b) => b.addEventListener("click", () => { pilihTahap = b.dataset.t === "semua" ? "semua" : Number(b.dataset.t); vTahap(); }));
+  v.querySelectorAll("#seg-p button").forEach((b) => b.addEventListener("click", () => { pilihPersen = b.dataset.p; vTahap(); }));
+  garis($("#c-lat"), { x: TAHAP, ylabel: `${pilihPersen.toUpperCase()} (dtk)`, fmt: f1, seri: [
+    { nama: "sebelum optimasi", warna: "var(--ink3)", putus: true, v: DATA.tahap.map((t) => t.lama?.[pilihPersen] ?? null) },
+    { nama: "sesudah", warna: "var(--accent)", v: DATA.tahap.map((t) => t.baru[pilihPersen]) }] });
+  const k = $("#k-tahap");
+  if (pilihTahap === "semua") {
+    k.innerHTML = `<h3>Semua tahap</h3><p class="ket">Klik judul kolom untuk mengurutkan. Pilih satu tahap di atas untuk melihat rincian per jenis pertanyaan.</p><div id="t-tahap"></div>`;
+    tabel($("#t-tahap"), [
+      { id: "pengguna", label: "Pengguna", num: true }, { id: "n", label: "n", num: true },
+      { id: "v2", label: "v2 lulus / sebagian / gagal", f: (v, r) => `<span class="pill lulus">${r.lulus}</span><span class="pill sebagian">${r.sebagian}</span><span class="pill gagal">${r.gagal}</span>` },
+      { id: "gagal_lama", label: "gagal baseline", num: true }, { id: "habis", label: "habis waktu", num: true },
+      { id: "mean", label: "Rata (dtk)", num: true, f: f1 }, { id: "p50", label: "P50", num: true, f: f1 }, { id: "p90", label: "P90", num: true, f: f1 },
+      { id: "p95", label: "P95", num: true, f: f1 }, { id: "p99", label: "P99", num: true, f: f1 }, { id: "min", label: "Min", num: true, f: f1 }, { id: "max", label: "Maks", num: true, f: f1 },
+      { id: "ttft_p50", label: "TTFT P50", num: true, f: f1 }, { id: "llm", label: "LLM/wf", num: true, f: f2 }, { id: "perute", label: "perute/wf", num: true, f: f2 },
+      { id: "tok_in", label: "token masuk/wf", num: true, f: f0 }, { id: "tok_out", label: "token keluar/wf", num: true, f: f0 }, { id: "deleg", label: "delegasi/wf", num: true, f: f2 },
+    ], DATA.tahap.map((t) => ({ pengguna: t.pengguna, n: t.baru.n, lulus: t.baru.v2.lulus || 0, sebagian: t.baru.v2.sebagian || 0, gagal: t.baru.v2.gagal || 0, v2: t.baru.v2_lulus_pct,
+      gagal_lama: t.lama?.v2_gagal ?? null, habis: t.baru.habis, mean: t.baru.mean, p50: t.baru.p50, p90: t.baru.p90, p95: t.baru.p95, p99: t.baru.p99, min: t.baru.min, max: t.baru.max,
+      ttft_p50: t.baru.ttft_p50, llm: t.baru.llm_per_wf, perute: t.baru.perute_per_wf, tok_in: t.baru.token_masuk_per_wf, tok_out: t.baru.token_keluar_per_wf, deleg: t.baru.delegasi_per_wf })),
+      { cat: "Token per workflow dihitung dari workflow yang seluruh panggilan modelnya cocok dengan catatan LiteLLM (88% panggilan). Delegasi baseline tidak tercatat (pencatatan baru ada sejak 24 Nov)." });
+  } else {
+    const t = DATA.tahap.find((x) => x.pengguna === pilihTahap), rows = DATA.kode_tahap.filter((r) => r.tahap === pilihTahap);
+    k.innerHTML = `<h3>${pilihTahap} pengguna — ${t.baru.n} pertanyaan</h3>
+      <div class="kpis">${kpi("P50 / P95", `${f1(t.baru.p50)} / ${f1(t.baru.p95)}<small>dtk</small>`, "sesudah", t.lama ? delta(t.lama.p95, t.baru.p95) : "")}
+        ${kpi("Lulus v2", pct(t.baru.v2_lulus_pct), `gagal ${t.baru.v2_gagal} · sebagian ${t.baru.v2_sebagian}`, t.lama ? delta(t.lama.v2_lulus_pct, t.baru.v2_lulus_pct, false, (v) => f1(v) + "%") : "")}
+        ${kpi("Antrean vLLM / permintaan", f2((t.baru.antre_ms || 0) / 1000) + "<small>dtk</small>", `TTFT vLLM ${f2((t.baru.ttft_vllm_ms || 0) / 1000)} dtk`, t.lama ? delta((t.lama.antre_ms || 0) / 1000, (t.baru.antre_ms || 0) / 1000, true, f2) : "")}</div>
+      <div id="t-kt"></div>`;
+    tabel($("#t-kt"), [
+      { id: "kode", label: "Kode" }, { id: "jenis", label: "Jenis" }, { id: "n", label: "n", num: true },
+      { id: "v", label: "v2", f: (v, r) => `<span class="pill lulus">${r.lulus}</span><span class="pill sebagian">${r.sebagian}</span><span class="pill gagal">${r.gagal}</span>` },
+      { id: "p50", label: "P50 (dtk)", num: true, f: f1 }, { id: "maks", label: "Maks (dtk)", num: true, f: f1 }, { id: "llm", label: "LLM/wf", num: true, f: f2 },
+    ], rows);
+  }
+}
+
+/* ================================================================ JENIS PERTANYAAN */
+function vKode() {
+  $("#v-kode").innerHTML = `<h2 style="margin-top:0">Apakah jawabannya benar, per jenis pertanyaan?</h2><p class="lead">Beban 1–20 pengguna digabung (±29 pertanyaan per kode). Evaluator v2 sama untuk keduanya; baseline dinilai ulang dari bukti yang tercatat saat itu.</p>
+    <div class="card"><div id="c-kode"></div></div><div class="card"><div id="t-kode"></div></div>`;
+  tumpuk($("#c-kode"), Object.entries(DATA.kode).flatMap(([k, o]) => [{ label: `${k} sebelum`, ...o.lama }, { label: `${k} sesudah`, ...o.baru }]));
+  tabel($("#t-kode"), [
+    { id: "kode", label: "Kode" }, { id: "jenis", label: "Jenis" },
+    { id: "lama", label: "Sebelum: lulus/sebagian/gagal", f: (v, r) => `${r.lama.lulus} / ${r.lama.sebagian} / ${r.lama.gagal}` },
+    { id: "baru", label: "Sesudah: lulus/sebagian/gagal", f: (v, r) => `${r.baru.lulus} / ${r.baru.sebagian} / ${r.baru.gagal}` },
+    { id: "med20", label: "Median 20 Nov", num: true, f: f1 }, { id: "med23", label: "Median 23 Nov", num: true, f: f1 }, { id: "medb", label: "Median sesudah", num: true, f: f1 },
+  ], Object.entries(DATA.kode).map(([k, o]) => ({ kode: k, jenis: o.jenis, lama: o.lama, baru: o.baru, med20: o.median_20, med23: o.median_23, medb: o.median_baru })),
+  { cat: "Median 20 Nov = tahap 1–8 pengguna; 23 Nov = 10–20 pengguna; sesudah = 1–20 pengguna. Q2 dan Q6 tidak disentuh optimasi; selisih median keduanya dalam ragam antar-jalan." });
+}
+
+/* ================================================================ RUTE & ORKESTRASI */
+function vRute() {
+  const R = DATA.rute, O = DATA.orkes;
+  const baris = (l, v, t, ok) => `<tr><td>${l}</td><td class="num">${v}</td><td class="num">${t ?? ""}</td><td>${ok == null ? "" : ok ? '<span class="ok">tercapai</span>' : '<span class="no">belum</span>'}</td></tr>`;
+  $("#v-rute").innerHTML = `<h2 style="margin-top:0">Apakah pertanyaan diarahkan ke agent yang tepat?</h2><p class="lead">Diukur dari span model (agent mana yang benar-benar dipanggil) dan catatan penjaga per permintaan — bukan dari teks jawaban.</p>
+    <div class="grid2">
+      <div class="card"><h3>Q4 — prosedur pengajuan cuti</h3><div class="tw"><table><thead><tr><th>Metrik</th><th class="num">Nilai</th><th class="num">Target</th><th></th></tr></thead><tbody>
+        ${baris("Pilihan pertama model = pemegang SOP", `${R.q4.first_n}/${R.q4.n} (${pct(R.q4.first_choice_acc_pct)})`, "", null)}
+        ${baris("…baseline 23 Nov (beban)", `${R.q4.base_first}`, "", null)}
+        ${baris("Agent efektif = pemegang SOP", pct(R.q4.effective_acc_pct), "≥ 95%", R.q4.effective_acc_pct >= 95)}
+        ${baris("Pengalihan otomatis Tahap 3", R.q4.dialihkan, "", null)}
+        ${baris("Agent tidak relevan dieksekusi", R.q4.agent_tidak_relevan_dieksekusi, "0", R.q4.agent_tidak_relevan_dieksekusi === 0)}
+        ${baris("cari_sop dipanggil", pct(R.q4.cari_sop_pct), "≥ 98%", R.q4.cari_sop_pct >= 98)}
+        ${baris("Jawaban akhir lulus v2", pct(R.q4.final_lulus_pct), "", null)}
+        ${baris("Fallback berputar", R.q4.fallback_batas, "0", R.q4.fallback_batas === 0)}
+      </tbody></table></div><p class="mini">Pemegang alat dokumen untuk akun uji: ${esc(R.q4.pemegang_dokumen.join(", "))}. Pilihan pertama: ${esc(Object.entries(R.q4.pilihan_pertama).map(([a, n]) => `${a} ${n}×`).join(", "))}.</p></div>
+      <div class="card"><h3>Q1, Q5, Q8</h3><div class="tw"><table><thead><tr><th>Metrik</th><th class="num">Nilai</th></tr></thead><tbody>
+        <tr><td>Q1 periode argumen = September 2026</td><td class="num">${R.q1.periode_sesuai}/${R.q1.n}</td></tr>
+        <tr><td>Q1 angka benar</td><td class="num">${R.q1.angka_benar}/${R.q1.n}</td></tr>
+        <tr><td>Q1 ditolak penjaga periode (perlu-periode)</td><td class="num">${R.q1.perlu_periode_ditolak}</td></tr>
+        <tr><td>Q5 persetujuan karangan / delegasi berulang / alat berulang</td><td class="num">${R.q5.persetujuan_karangan_ditolak} / ${R.q5.delegasi_berulang_ditolak} / ${R.q5.alat_berulang}</td></tr>
+        <tr><td>Q5 rancangan ganda / klaim tersimpan palsu / kosong / timeout</td><td class="num">${R.q5.rancangan_ganda} / ${R.q5.klaim_tersimpan_palsu} / ${R.q5.kosong} / ${R.q5.timeout}</td></tr>
+        <tr><td>Q5 berhenti menunggu pengguna: klarifikasi / tawaran</td><td class="num">${R.q5.berhenti_hitl.klarifikasi || 0} / ${R.q5.berhenti_hitl.tawaran || 0}</td></tr>
+        <tr><td>Q5 sub-kategori karangan dikosongkan (Tahap 6)</td><td class="num">${R.q5.sub_dikosongkan}</td></tr>
+        <tr><td>Q8 dijawab langsung tanpa delegasi</td><td class="num">${R.q8.langsung_tanpa_delegasi}/${R.q8.n}</td></tr>
+        <tr><td>Q8 efisien (tanpa alat & delegasi)</td><td class="num">${pct(R.q8.efisien_pct)} <span class="mini">baseline ${esc(R.q8.base_efisien)}</span></td></tr>
+        <tr><td>Q8 teks alat bocor</td><td class="num">${R.q8.teks_alat_bocor}</td></tr>
+        <tr><td>Q8 median</td><td class="num">${f1(R.q8.median_dtk)} dtk</td></tr>
+      </tbody></table></div></div>
+    </div>
+    <div class="card"><h3>Orkestrasi — seluruh ${O.n} workflow beban</h3><div class="kpis">
+      ${kpi("Panggilan LLM / workflow", f2(O.llm), `perute ${f2(O.perute)} · agent bawahan ${f2(O.bawahan)}`)}
+      ${kpi("Delegasi aktual / workflow", f2(O.delegasi), "Q8 tidak pernah didelegasikan")}
+      ${kpi("Ditolak penjaga", O.ditolak_total, esc(Object.entries(O.ditolak).map(([k, n]) => `${k} ${n}`).join(" · ")))}
+    </div><p class="interpret"><b>Penjaga bekerja tanpa salah tolak yang terlihat:</b> 9× agent dicegah memilih sub-kategori sendiri (menunggu pengguna), 4 sub-kategori karangan dikosongkan, 1 delegasi ke agent tanpa alat ditolak. Satu penolakan itu justru berujung jawaban menyesatkan — lihat halaman Kegagalan (F1).</p></div>`;
+}
+
+/* ================================================================ INFRASTRUKTUR */
+function vInfra() {
+  $("#v-infra").innerHTML = `<h2 style="margin-top:0">Antrean dan pembagian ke 4 GPU</h2><p class="lead">Dari /metrics vLLM keempat replika (dicuplik awal & akhir tiap tahap) dan nvidia-smi tiap 0,5 dtk.</p>
+    <div class="grid2"><div class="card"><h3>Utilisasi GPU rata-rata</h3><div id="c-gpu"></div></div><div class="card"><h3>Antrean vLLM per permintaan</h3><div id="c-antre"></div></div></div>
+    <div class="grid2"><div class="card"><h3>TTFT di vLLM (rata-rata per permintaan)</h3><div id="c-ttftv"></div></div><div class="card"><h3>TTFT yang terlihat pengguna (P50)</h3><div id="c-ttftu"></div></div></div>
+    <div class="card"><h3>Sebaran panggilan model antar-replika (simple-shuffle)</h3><div id="t-rep"></div></div>
+    <p class="caveat"><b>Tidak tercatat:</b> pemakaian KV cache, request berjalan/menunggu per detik, dan throughput token dari log vLLM — instance sudah dimatikan sebelum log diambil. Preemption 0 di semua tahap (dari /metrics). Kolom "prefix-cache" = rasio cache hit awalan prompt, bukan pemakaian KV.</p>`;
+  const ser = (k, f = (v) => v) => [{ nama: "sebelum optimasi", warna: "var(--ink3)", putus: true, v: DATA.tahap.map((t) => t.lama?.[k] == null ? null : f(t.lama[k])) },
+    { nama: "sesudah", warna: "var(--accent)", v: DATA.tahap.map((t) => t.baru[k] == null ? null : f(t.baru[k])) }];
+  garis($("#c-gpu"), { x: TAHAP, ylabel: "util (%)", fmt: f0, ymax: 100, seri: ser("gpu_util") });
+  garis($("#c-antre"), { x: TAHAP, ylabel: "antrean (dtk)", fmt: f2, seri: ser("antre_ms", (v) => v / 1000) });
+  garis($("#c-ttftv"), { x: TAHAP, ylabel: "TTFT vLLM (dtk)", fmt: f2, seri: ser("ttft_vllm_ms", (v) => v / 1000) });
+  garis($("#c-ttftu"), { x: TAHAP, ylabel: "TTFT P50 (dtk)", fmt: f1, seri: ser("ttft_p50") });
+  const REP = ["qwen14-vllm", "qwen14-gpu1", "qwen14-gpu2", "qwen14-gpu3"];
+  tabel($("#t-rep"), [{ id: "pengguna", label: "Pengguna", num: true }, ...REP.map((r, i) => ({ id: r, label: `GPU ${i} (${r})`, num: true })), { id: "pre", label: "Preemption", num: true }, { id: "cache", label: "Prefix-cache hit", num: true, f: (v) => v == null ? "—" : f0(v * 100) + "%" }],
+    DATA.tahap.map((t) => ({ pengguna: t.pengguna, ...Object.fromEntries(REP.map((r) => [r, t.baru.replika?.[r]?.panggilan ?? 0])), pre: t.baru.preemption, cache: t.baru.kv_cache })),
+    { cat: "Angka = jumlah panggilan model per replika pada tahap itu (sesudah optimasi)." });
+}
+
+/* ================================================================ THROUGHPUT & BIAYA */
+function vBiaya() {
+  const S = DATA.total;
+  $("#v-biaya").innerHTML = `<h2 style="margin-top:0">Pertanyaan tuntas per menit dan biaya server</h2><p class="lead">Durasi tahap = jam dinding dari pertanyaan pertama sampai pertanyaan terakhir tahap itu selesai. Tarif instance $${DATA.meta.tarif}/jam (cek ulang terhadap tagihan AWS aktual).</p>
+    <div class="kpis">${kpi("Waktu GPU tahap beban", f0(S.baru.durasi) + "<small>dtk</small>", "1–20 pengguna, tanpa jeda antar-tahap", delta(S.lama.durasi, S.baru.durasi, true, f0))}
+      ${kpi("Biaya tahap beban", usd(S.baru.biaya, 2), `${S.baru.n} workflow`, delta(S.lama.biaya, S.baru.biaya, true, (v) => usd(v, 2)))}
+      ${kpi("Biaya per workflow sukses", usd(S.baru.usd_sukses), "v2 lulus", delta(S.lama.usd_sukses, S.baru.usd_sukses, true, (v) => usd(v)))}</div>
+    <div class="card"><h3>Workflow sukses per menit</h3><div id="c-tp"></div><p class="interpret"><b>Lonjakan di 12–16 pengguna</b> terutama karena ekor panjang baseline (P99 200–239 dtk) yang memperpanjang tahap; bukan GPU yang lebih cepat. Throughput dibatasi desain uji (3 pertanyaan per pengguna, jeda 5 dtk), bukan kapasitas maksimum.</p></div>
+    <div class="card"><div id="t-biaya"></div></div>`;
+  pasangan($("#c-tp"), { x: TAHAP, lama: DATA.tahap.map((t) => t.lama?.wf_sukses_per_menit ?? null), baru: DATA.tahap.map((t) => t.baru.wf_sukses_per_menit), label: "workflow sukses/menit", fmt: (v) => f1(v) });
+  tabel($("#t-biaya"), [{ id: "pengguna", label: "Pengguna", num: true }, { id: "dur", label: "Durasi (dtk)", num: true, f: f0 }, { id: "wf", label: "wf/menit", num: true, f: f1 }, { id: "ok", label: "sukses/menit", num: true, f: f1 },
+    { id: "biaya", label: "Biaya tahap", num: true, f: (v) => usd(v, 3) }, { id: "per", label: "$/wf", num: true, f: (v) => usd(v) }, { id: "ps", label: "$/sukses", num: true, f: (v) => usd(v) }, { id: "psl", label: "$/sukses baseline", num: true, f: (v) => usd(v) }],
+    DATA.tahap.map((t) => ({ pengguna: t.pengguna, dur: t.baru.durasi_dtk, wf: t.baru.wf_per_menit, ok: t.baru.wf_sukses_per_menit, biaya: t.baru.biaya_usd, per: t.baru.usd_per_wf, ps: t.baru.usd_per_sukses, psl: t.lama?.usd_per_sukses })));
+}
+
+/* ================================================================ KEGAGALAN */
+let gTahap = "semua", gKode = "semua";
+function vGagal() {
+  const G = DATA.gagal, kodes = [...new Set(G.map((g) => g.kode))].sort();
+  const lolos = G.filter((g) => (gTahap === "semua" || g.tahap === gTahap) && (gKode === "semua" || g.kode === gKode));
+  $("#v-gagal").innerHTML = `<h2 style="margin-top:0">Daftar yang tidak lulus penuh</h2><p class="lead">${G.length} dari ${DATA.total.baru.n} pertanyaan tidak lulus penuh (${DATA.total.baru.gagal} gagal, ${DATA.total.baru.sebagian} sebagian). Tidak ada kegagalan material: tidak ada klaim tersimpan palsu, pelanggaran hak akses, maupun operasi ganda.</p>
+    <div class="card">${DATA.rca.map((r) => `<div class="rca ${r.kelas}"><h4>${esc(r.judul)}</h4>${r.isi.map((p) => `<p>${esc(p)}</p>`).join("")}</div>`).join("")}</div>
+    <div class="ctl"><span class="lbl">Tahap</span><div class="seg" id="sg-t">${["semua", ...TAHAP].map((t) => `<button type="button" data-t="${t}" aria-pressed="${String(t) === String(gTahap)}">${t === "semua" ? "Semua" : t}</button>`).join("")}</div>
+      <span class="lbl">Kode</span><div class="seg" id="sg-k">${["semua", ...kodes].map((k) => `<button type="button" data-k="${k}" aria-pressed="${k === gKode}">${k === "semua" ? "Semua" : k}</button>`).join("")}</div></div>
+    <div class="card"><div id="t-gagal"></div></div>`;
+  $("#v-gagal").querySelectorAll("#sg-t button").forEach((b) => b.addEventListener("click", () => { gTahap = b.dataset.t === "semua" ? "semua" : Number(b.dataset.t); vGagal(); }));
+  $("#v-gagal").querySelectorAll("#sg-k button").forEach((b) => b.addEventListener("click", () => { gKode = b.dataset.k; vGagal(); }));
+  tabel($("#t-gagal"), [{ id: "tahap", label: "Pengguna", num: true }, { id: "kode", label: "Kode" }, { id: "v2", label: "v2", f: (v) => `<span class="pill ${v}">${v}</span>` },
+    { id: "kategori", label: "Kategori" }, { id: "dtk", label: "dtk", num: true, f: f1 }, { id: "alat", label: "Alat dipanggil", f: (v) => esc((v || []).join(", ") || "—") },
+    { id: "agent", label: "Agent pertama → efektif", f: (v, r) => esc(`${r.pertama || "—"} → ${(r.efektif || []).join(", ") || "—"}`) },
+    { id: "penjaga", label: "Penjaga", f: (v, r) => esc([...(r.ditolak || []), r.berhenti ? `berhenti: ${r.berhenti}` : ""].filter(Boolean).join(" · ") || "—") },
+    { id: "trace", label: "Trace", f: (v) => `<span class="mini">${esc(v.slice(0, 8))}</span>` }], lolos, { cat: `${lolos.length} baris. Isi jawaban tidak ditampilkan di dashboard; ada di jawaban.jsonl (laptop).` });
+}
+
+/* ================================================================ CARA UJI (sama polanya dengan halaman "Cara uji" uji lain) */
+function vMetode() {
+  const M = DATA.meta;
+  $("#v-metode").innerHTML = `<h2 style="margin-top:0">Cara uji pasca-optimasi</h2>
+    <p class="lead">Benchmark konkurensi 24 November 2026: skenario, workload, dan setelan server yang sama dengan uji 20 &amp; 23 November, sesudah perbaikan workflow agent Tahap 1–6.</p>
+    <div class="card"><h3>Sumber data</h3><ul>${M.sumber.map((k) => `<li><code>${esc(k)}</code></li>`).join("")}</ul></div>
+    <div class="card"><h3>Cara uji</h3><ul>${M.konfig.map((k) => `<li>${esc(k)}</li>`).join("")}</ul>
+      <p class="ket">Yang diukur per pertanyaan: waktu sampai jawaban selesai, waktu kata pertama yang terlihat pengguna, panggilan model per agent (span), alat yang dipanggil beserta argumennya, keputusan penjaga alur & rute, dan token per panggilan (dicocokkan ke catatan LiteLLM). Isi jawaban tidak masuk dashboard.</p></div>
+    <div class="card"><h3>Keterbandingan dengan uji sebelum perbaikan</h3><ul>${M.banding.map((k) => `<li>${esc(k)}</li>`).join("")}</ul></div>
+    <div class="card"><h3>Batasan</h3><ul><li>${esc(M.cakupan)}</li>${M.batasan.map((k) => `<li>${esc(k)}</li>`).join("")}</ul></div>`;
+}
+
+/* ================================================================ NAVIGASI */
+const VIEWS = [["ringkas", "Ringkasan", vRingkas, "M3 12l9-8 9 8M5 10v10h14V10"], ["tahap", "Per tahap", vTahap, "M4 20V10M10 20V4M16 20v-7M22 20H2"],
+  ["kode", "Jenis pertanyaan", vKode, "M4 6h16M4 12h16M4 18h10"], ["rute", "Rute & orkestrasi", vRute, "M6 3v12a3 3 0 0 0 3 3h9M15 15l3 3-3 3"],
+  ["infra", "GPU & antrean", vInfra, "M4 7h16v10H4zM8 11h2M14 11h2"], ["biaya", "Throughput & biaya", vBiaya, "M12 2v20M17 6H9a3 3 0 0 0 0 6h6a3 3 0 0 1 0 6H6"],
+  ["gagal", "Kegagalan", vGagal, "M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"],
+  ["metode", "Cara uji", vMetode, "M4 5h16M4 12h16M4 19h10"]];
+function buka(k) {
+  VIEWS.forEach(([id, , f]) => { const el = $("#v-" + id); el.hidden = id !== k; if (id === k) f(); });
+  document.querySelectorAll("[data-v]").forEach((b) => b.setAttribute("aria-current", b.dataset.v === k ? "page" : "false"));
+  try { localStorage.setItem("halaman-pasca", k); } catch (e) {}
+}
+$("#nav").innerHTML = VIEWS.map(([k, l, , ik]) => `<button type="button" data-v="${k}"><svg viewBox="0 0 24 24"><path d="${ik}"/></svg>${l}</button>`).join("");
+$("#mtabs").innerHTML = VIEWS.map(([k, l]) => `<button type="button" class="btn" data-v="${k}">${l}</button>`).join("");
+document.querySelectorAll("[data-v]").forEach((b) => b.addEventListener("click", () => buka(b.dataset.v)));
+$("#b-metode").addEventListener("click", () => buka("metode"));
+$("#cetak").addEventListener("click", () => print());
+const tema = $("#tema");
+const setTema = (t) => { document.documentElement.dataset.theme = t; tema.textContent = t === "dark" ? "Tema terang" : "Tema gelap"; tema.setAttribute("aria-pressed", String(t === "dark")); try { localStorage.setItem("tema-dashboard", t); } catch (e) {} };
+tema.addEventListener("click", () => setTema(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
+// Dipanggil hasil-pengujian.html saat dashboard ini ditanam sebagai iframe (pola yang sama dengan dashboard lain).
+function pasangTema(t) { setTema(t === "dark" ? "dark" : "light"); }
+if (document.documentElement.dataset.theme === "dark") setTema("dark");
+$("#b-tgl").textContent = DATA.meta.tanggal;
+$("#foot").textContent = `Dibangun ${DATA.meta.dibuat} dari ${DATA.meta.sumber[0]} · scripts/buat-dashboard-pasca-optimasi.py`;
+let awal = "ringkas"; try { awal = localStorage.getItem("halaman-pasca") || "ringkas"; } catch (e) {}
+buka(VIEWS.some(([k]) => k === awal) ? awal : "ringkas");
+</script>
+</body>
+</html>

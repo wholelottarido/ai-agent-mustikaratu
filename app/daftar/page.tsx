@@ -82,7 +82,7 @@ export default function Daftar() {
           </span>
           <h1 className="text-xl font-semibold tracking-tight">Pengajuan terkirim</h1>
           <p className="text-sm text-tinta-lemah">
-            Akun kamu belum aktif. Admin akan meninjau dan menentukan aksesnya dulu — kamu
+            Akun Anda belum aktif. Admin akan meninjau dan menentukan aksesnya terlebih dahulu — Anda
             baru bisa masuk setelah disetujui.
           </p>
           <Link
@@ -172,7 +172,7 @@ export default function Daftar() {
           <input
             value={form.alasan}
             onChange={ubah("alasan")}
-            placeholder="Biar admin tahu kamu siapa"
+            placeholder="Agar admin mengetahui identitas Anda"
             className={kelas}
           />
         </label>

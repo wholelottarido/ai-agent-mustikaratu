@@ -1,5 +1,6 @@
 import { sesiAtau401 } from "@/lib/sesi-server";
 import { simpanPesan } from "@/lib/percakapan";
+import { bersihkanKlarifikasi } from "@/lib/cocok-pilihan";
 
 /**
  * Simpan satu pesan ke percakapan.
@@ -23,12 +24,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
   try {
     const {
       teks, model, detik, jumlahQuery, tokenMasuk, tokenKeluar, sumber, sqlDipakai,
-      jumlahDokumen, jumlahKb, jumlahTiket, sopDipakai,
+      jumlahDokumen, jumlahKb, jumlahTiket, sopDipakai, klarifikasi,
     } =
       await req.json();
     if (typeof teks !== "string" || !teks.trim()) {
       return Response.json({ error: "Teks kosong." }, { status: 400 });
     }
+
+    // Datang dari browser dan nanti jadi tombol, jadi diperiksa bentuknya dulu.
+    const daftar = bersihkanKlarifikasi(klarifikasi);
 
     // simpanPesan() memeriksa kepemilikan; percakapan orang lain diabaikan.
     await simpanPesan(id, sesi.id, {
@@ -50,6 +54,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       jumlahKb: typeof jumlahKb === "number" ? jumlahKb : null,
       jumlahTiket: typeof jumlahTiket === "number" ? jumlahTiket : null,
       sopDipakai: typeof sopDipakai === "string" ? sopDipakai.slice(0, 500) : null,
+      klarifikasi: daftar ? JSON.stringify(daftar) : null,
     });
     return Response.json({ ok: true });
   } catch (error) {

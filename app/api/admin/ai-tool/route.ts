@@ -4,6 +4,7 @@ import { muatKonfig } from "@/lib/ai-konfig";
 import { ubahTool, ringkasTool, buatTool, sumberPilihan, type UbahanTool, type ToolBaru } from "@/lib/ubah-tool";
 import { sambungTool, putusTool, lepasTool, pasangLagiTool } from "@/lib/sambung-tool";
 import { setujuiTulis, cabutTulis } from "@/lib/tulis-disetujui";
+import { batalkanTolak, putuskanTool } from "@/lib/tinjau-tool";
 import { tulisPerluPersetujuan } from "@/voltagent/registry-tulis";
 import { buatToolTulisBaru } from "@/lib/tool-tulis-baru";
 import type { Cakupan } from "@/lib/ai-konfig";
@@ -46,7 +47,7 @@ export async function GET() {
   // lain hilang dari daftar agent — bukan membiarkannya jadi teka-teki.
   // `sumber` ikut dikirim: borang tool baru memilih dari daftar ini, bukan
   // mengetik nama view — tidak ada nama tabel yang diisi tangan.
-  return Response.json({ tool, gantian: k.gantian, sumber: await sumberPilihan() });
+  return Response.json({ tool, gantian: k.gantian, tinjauan: k.tinjauan, sumber: await sumberPilihan() });
 }
 
 export async function PATCH(req: Request) {
@@ -122,6 +123,21 @@ export async function POST(req: Request) {
   // sama dari agent mana pun, jadi menyetujuinya di satu agent lalu
   // menganggapnya belum disetujui di agent lain adalah pembedaan yang tidak
   // menjaga apa pun. Itu sebabnya `agent` tidak dibaca di cabang ini.
+  if (b.mode === "setujui-baru" || b.mode === "tolak-baru" || b.mode === "batal-tolak") {
+    // Hanya tool yang memang sedang ditinjau, supaya kode sembarang tidak ikut tercatat.
+    const k = await muatKonfig();
+    if (!k.tinjauan.some((t) => t.kode === b.tool)) {
+      return Response.json({ error: `tool "${b.tool}" tidak sedang ditinjau` }, { status: 400 });
+    }
+    const h =
+      b.mode === "batal-tolak"
+        ? await batalkanTolak(b.tool)
+        : await putuskanTool(b.tool, b.mode === "setujui-baru" ? "disetujui" : "ditolak", jaga.id);
+    if (!h.ok) return Response.json({ error: h.sebab }, { status: 400 });
+    console.warn(`[/api/admin/ai-tool] tinjauan tool tim lain: ${b.tool} ${b.mode} oleh pengguna ${jaga.id}`);
+    return Response.json({ ok: true });
+  }
+
   if (b.mode === "setujui-tulis") {
     // ⚠️ `operasi` dan `tabel` DIAMBIL DARI KONFIGURASI, bukan dari badan
     // permintaan. Yang tercatat harus tool yang benar-benar ditinjau; kalau
@@ -329,6 +345,7 @@ export async function PUT(req: Request) {
     cakupan: (typeof m.cakupan === "string" ? m.cakupan : "semua") as Cakupan,
     batas: typeof m.batas === "number" ? m.batas : 20,
     urut: typeof m.urut === "string" && m.urut ? m.urut : null,
+    urutArah: m.urutArah === "asc" ? "asc" : "desc",
     contoh: typeof m.contoh === "string" ? m.contoh : null,
     izin: typeof m.izin === "string" && m.izin.trim() ? m.izin.trim() : null,
     idApps,

@@ -28,7 +28,9 @@
 import { createTool } from "@voltagent/core";
 import { z } from "zod";
 import { poolPerusahaan } from "@/lib/db-perusahaan";
+import { profilAktif, rentang, ringkasHasilAlat } from "@/lib/profil-agent";
 import type { Cakupan, KonfigTool, FilterTool } from "@/lib/ai-konfig";
+import { cekIzin, cakupanUntuk } from "@/lib/izin-tool";
 import { buatToolKode, penanganDikenal } from "./registry-kode";
 import {
   buatToolTulis, tulisDikenal, tulisPerluPersetujuan, type CatatRancangan,
@@ -85,6 +87,24 @@ export type SesiPemakai = {
    * ditelusuri" perlu ditangani manusia dengan cara yang berbeda.
    */
   izin?: string[];
+  /**
+   * Izin per `id_apps`, dari peran di aplikasi itu saja. Dipakai gerbang izin
+   * untuk alat yang punya `id_apps` — lihat `lib/izin-tool.ts`. `undefined`
+   * (sesi skrip uji lama) -> gerbang jatuh ke `izin` gabungan.
+   */
+  izinPerApp?: Record<string, string[]>;
+  /** `id_roles` yang dipegang pemakai, untuk `ai_tool_cakupan`. */
+  peran?: string[];
+  /** Nama aplikasi per `id_apps`, hanya untuk pesan tolak yang terbaca manusia. */
+  namaApp?: Record<string, string>;
+  /**
+   * Batas baris hasil alat baca untuk permintaan ini, di bawah `ai_tool.batas`.
+   * Diisi hanya untuk model berkapasitas kecil (Gemma di server kantor, 8.192
+   * token): 26 Nov 2026 hasil `data_outlet` dan `harga_cmod` saja sudah
+   * membuat permintaan berikutnya 9.000–12.000 token dan ditolak server.
+   * `undefined` = tanpa batas tambahan.
+   */
+  maksBaris?: number;
   idCompany: string | null;
   idUsers: string | null;
 };
@@ -289,9 +309,49 @@ export function milikSiapa(cakupan: Cakupan, sesi: SesiPemakai): string {
  * Tool tulis juga tidak. Memaksakan nama view untuk keduanya berarti mengarang
  * sumber yang tidak pernah dibaca.
  */
-export type Jejak = { alat: string; view: string | null };
+/**
+ * Satu pilihan produk yang ditawarkan waktu nama yang diketik user ambigu.
+ *
+ * ⚠️ BENTUKNYA DIPAKAI TOMBOL DI LAYAR, bukan cuma dibaca model. `kode` dan
+ * `nama` datang apa adanya dari katalog (`cariSku`); `riwayat_bulan` dan
+ * `data_terakhir` boleh tidak ada karena `cari_tren_pasar` dulu tidak
+ * mengirimkannya — percakapan lama tetap harus bisa dibuka.
+ */
+export type PilihanProduk = {
+  kode: string;
+  nama: string;
+  riwayat_bulan?: number;
+  data_terakhir?: string;
+};
+
+/**
+ * Pertanyaan "produk yang mana?" beserta daftar jawabannya.
+ *
+ * ⚠️ IKUT LEWAT `Jejak`, BUKAN LEWAT PART TOOL. Sebabnya sama persis dengan
+ * `rancangan` di `jalur-agent.ts`: waktu router mendelegasikan ke agent
+ * pemasaran, pemanggilan tool agent bawahan tidak sampai ke klien — yang lewat
+ * cuma `delegate_task`. Jadi `tool-ramal_penjualan` tidak pernah ada di layar,
+ * dan tombol pilihannya tidak akan pernah muncul kalau dibaca dari situ.
+ */
+export type Klarifikasi = { pesan: string; pilihan: PilihanProduk[]; alat?: string };
+
+export type RujukanSop = {
+  judul: string;
+  bagian?: string;
+  url?: string;
+};
+
+export type Jejak = {
+  alat: string;
+  view: string | null;
+  klarifikasi?: Klarifikasi;
+  sop?: RujukanSop[];
+};
 
 export type CatatSumber = (j: Jejak) => void;
+
+export type ProgresTool = { alat: string; tahap: "mulai" | "selesai"; view?: string };
+export type LaporProgres = (progres: ProgresTool) => void;
 
 /** Keterangan arah operator, supaya model tahu `dari` itu batas bawah. */
 const KET_OPERATOR: Record<string, string> = {
@@ -345,6 +405,32 @@ export function buatToolBaca(t: KonfigTool, sesi: SesiPemakai, catat?: CatatSumb
       .optional()
       .describe(KET_OPERATOR[f.operator] ? `${f.label} — ${KET_OPERATOR[f.operator]}` : f.label);
   }
+  // Jumlah baris yang diminta pemakai ("tampilkan 5"). Batas atasnya tetap
+  // `ai_tool.batas` dan batas model (`sesi.maksBaris`); model cuma bisa MENGURANGI.
+  // Nama ini tidak bentrok dengan filter: filter dinamai dari nama kolom view.
+  const batasMaks = Math.min(batasAman(t), sesi.maksBaris ?? Infinity);
+  if (!("batas_baris" in bentuk)) {
+    bentuk.batas_baris = z
+      .number()
+      .int()
+      .min(1)
+      .max(batasMaks)
+      .optional()
+      .describe(`Jumlah baris yang diambil kalau pemakai menyebut angka ("tampilkan 5"). Kosongkan untuk bawaan (${batasMaks}).`);
+  }
+
+  // ⚠️ URUTAN & SIFAT FILTER DISEBUT DI DESKRIPSI (26 Nov 2026). Tanpa ini Haiku
+  // membalas "tampilkan 5 data outlet terbaru" dan "harga produk CMOD, 5 saja"
+  // dengan pertanyaan balik, lalu mengartikan "kiriman terbaru" sebagai filter
+  // "hari ini" (hasil kosong) — padahal alatnya sudah mengurutkan dari yang
+  // terbaru. Model tidak bisa tahu urutan yang tidak pernah diberitahukan.
+  // Diturunkan dari setelan, jadi berlaku untuk semua alat tanpa menyebut nama.
+  const urutan = t.urut.kolom
+    ? ` Hasil diurutkan menurut \`${t.urut.kolom}\` ${t.urut.arah === "asc" ? "naik (A→Z / terlama dulu)" : "turun (terbesar / terbaru dulu)"}.`
+    : "";
+  const sifatFilter = t.filter.length > 0
+    ? " Semua filter opsional: tanpa filter, alat memulangkan baris teratas sesuai urutan itu."
+    : "";
 
   const contoh = t.contoh ? ` Contoh pertanyaan: "${t.contoh}"` : "";
   const milik = milikSiapa(t.cakupan, sesi);
@@ -359,7 +445,7 @@ export function buatToolBaca(t: KonfigTool, sesi: SesiPemakai, catat?: CatatSumb
 
   return createTool({
     name: t.kode,
-    description: `${t.deskripsi}${catatanCakupan}${contoh}`,
+    description: `${t.deskripsi}${catatanCakupan}${urutan}${sifatFilter}${contoh}`,
     parameters: z.object(bentuk),
     execute: async (args: Record<string, unknown>): Promise<HasilTool | { galat: string }> => {
       const saring = penyaringUntuk(t, sesi);
@@ -406,13 +492,15 @@ export function buatToolBaca(t: KonfigTool, sesi: SesiPemakai, catat?: CatatSumb
         else throw new KonfigTidakSah(`${t.kode}: operator "${f.operator}" tidak dikenal`);
       }
 
-      const batas = batasAman(t);
+      const diminta = Number(args.batas_baris);
+      const batas = Number.isInteger(diminta) && diminta >= 1 ? Math.min(diminta, batasMaks) : batasMaks;
       // +1 baris untuk tahu hasilnya terpotong atau tidak, tanpa COUNT kedua.
       const sql = rangkai({
         pilih,
         view,
         syarat,
-        urut: t.urut.kolom ? `${pastikanNama(t.urut.kolom, bolehUrut, `${t.kode} urut`)} ${arah(t)}` : null,
+        // NULLS LAST: tanpa ini urutan menurun menaruh baris kosong di atas, dan batas barisnya habis oleh mereka.
+        urut: t.urut.kolom ? `${pastikanNama(t.urut.kolom, bolehUrut, `${t.kode} urut`)} ${arah(t)} NULLS LAST` : null,
         batas: batas + 1,
       });
 
@@ -495,11 +583,17 @@ export function buatToolDariKonfig(
   sesi: SesiPemakai,
   catat?: CatatSumber,
   catatRancangan?: CatatRancangan,
+  laporProgres?: LaporProgres,
 ): { tool: ReturnType<typeof buatToolBaca>[]; dilewati: { kode: string; sebab: string }[] } {
   const tool: ReturnType<typeof buatToolBaca>[] = [];
   const dilewati: { kode: string; sebab: string }[] = [];
 
-  for (const t of daftar) {
+  for (const asli of daftar) {
+    // Cakupan per peran (`ai_tool_cakupan`) diterapkan PALING AWAL, pada salinan:
+    // semua yang dirakit di bawah — penyaring baris, label pemilik data, kartu
+    // rancangan — harus melihat cakupan yang sama.
+    const cakupan = cakupanUntuk(asli, sesi);
+    const t = cakupan === asli.cakupan ? asli : { ...asli, cakupan };
     // ⚠️ GERBANG IZIN, DIPERIKSA SEBELUM APA PUN DIRAKIT.
     //
     // `ai_tool.izin` diisi tim lain (`ticket:read` pada tool tiket) dan selama
@@ -510,19 +604,13 @@ export function buatToolDariKonfig(
     //
     // `izin` yang `null` berarti tidak ada syarat, bukan "belum diisi":
     // seluruh tool yang kita daftarkan sendiri bernilai null.
-    if (t.izin) {
-      const punya = sesi.izin;
-      if (!punya) {
-        dilewati.push({ kode: t.kode, sebab: `butuh izin "${t.izin}", tapi izin pemakai belum ditelusuri` });
-        continue;
-      }
-      if (!punya.includes(t.izin)) {
-        dilewati.push({
-          kode: t.kode,
-          sebab: `butuh izin "${t.izin}"; pemakai punya ${punya.length === 0 ? "(tidak satu pun)" : punya.join(", ")}`,
-        });
-        continue;
-      }
+    //
+    // Sejak 26 Nov 2026 diperiksa per aplikasi pemilik alat dan izin ganda
+    // dipecah — lihat `lib/izin-tool.ts`.
+    const izin = cekIzin(t, sesi);
+    if (!izin.ok) {
+      dilewati.push({ kode: t.kode, sebab: izin.sebab });
+      continue;
     }
 
     if (t.jenis === "kode") {
@@ -575,6 +663,33 @@ export function buatToolDariKonfig(
       tool.push(buatToolBaca(t, sesi, catat));
     } catch (e) {
       dilewati.push({ kode: t.kode, sebab: e instanceof KonfigTidakSah ? e.message : String(e) });
+    }
+  }
+  // Profiling (mati bawaan): span per alat. Dipasang HANYA kalau flag menyala saat agent dirakit,
+  // jadi saat mati `execute` tidak disentuh sama sekali. Lihat lib/profil-agent.ts.
+  if (profilAktif()) {
+    for (const alat of tool) {
+      const bisa = alat as unknown as { name: string; execute?: (...args: unknown[]) => unknown };
+      const jalankan = bisa.execute;
+      if (!jalankan) continue;
+      // ringkasHasilAlat: status & bentuk hasil saja (tanpa isi) — supaya "alat berhasil dipanggil tapi
+      // hasilnya minta klarifikasi / data belum ada" bisa dibedakan saat menelusuri kegagalan (RCA 24 Nov 2026).
+      bisa.execute = (...args: unknown[]) => rentang("alat", bisa.name, () => jalankan.apply(alat, args) as Promise<unknown>, {}, ringkasHasilAlat);
+    }
+  }
+  if (laporProgres) {
+    for (const alat of tool) {
+      const bisa = alat as unknown as { name: string; execute?: (...args: unknown[]) => unknown };
+      const jalankan = bisa.execute;
+      if (!jalankan) continue;
+      bisa.execute = async (...args: unknown[]) => {
+        laporProgres({ alat: bisa.name, tahap: "mulai" });
+        try {
+          return await jalankan.apply(alat, args);
+        } finally {
+          laporProgres({ alat: bisa.name, tahap: "selesai" });
+        }
+      };
     }
   }
   return { tool, dilewati };

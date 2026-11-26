@@ -41,22 +41,35 @@ export function Sidebar({
 }) {
   // Di layar kecil sidebar menutupi chat, jadi bawaannya tertutup.
   const [buka, setBuka] = useState(false);
+  // Di desktop chat adalah tugas utama; riwayat dibuka saat memang diperlukan.
+  const [ciut, setCiut] = useState(true);
   const [konfirmasi, setKonfirmasi] = useState<number | null>(null);
 
   const isi = (
     <div className="flex h-full w-72 flex-col bg-permukaan/50">
-      <div className="p-3">
+      <div className="flex items-center gap-2 p-3">
         <button
           onClick={() => {
             onBaru();
             setBuka(false);
           }}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl bg-utama px-3 py-2.5 text-sm font-medium text-utama-teks shadow-kecil transition-all hover:shadow-sedang hover:brightness-110 active:scale-[0.98]"
+          className="flex min-w-0 flex-1 items-center justify-center gap-2 rounded-2xl bg-utama px-3 py-2.5 text-sm font-medium text-utama-teks shadow-kecil transition-all hover:shadow-sedang hover:brightness-110 active:scale-[0.98]"
         >
           <svg viewBox="0 0 20 20" fill="none" className="size-4" aria-hidden>
             <path d="M10 4v12M4 10h12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
           </svg>
           Percakapan baru
+        </button>
+        <button
+          type="button"
+          onClick={() => setCiut(true)}
+          aria-label="Ciutkan riwayat percakapan"
+          title="Ciutkan riwayat"
+          className="hidden size-10 shrink-0 items-center justify-center rounded-xl text-tinta-lemah transition-colors hover:bg-kertas hover:text-tinta focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-utama md:flex"
+        >
+          <svg viewBox="0 0 20 20" fill="none" className="size-4" aria-hidden>
+            <path d="m12.5 5-5 5 5 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
         </button>
       </div>
 
@@ -71,7 +84,7 @@ export function Sidebar({
           <p className="px-3 py-6 text-center text-xs leading-relaxed text-tinta-lemah">
             Belum ada percakapan.
             <br />
-            Pertanyaan pertama kamu akan tersimpan di sini.
+            Pertanyaan pertama Anda akan tersimpan di sini.
           </p>
         )}
 
@@ -154,8 +167,39 @@ export function Sidebar({
 
   return (
     <>
-      {/* Layar besar: sidebar menetap */}
-      <aside className="hidden md:block">{isi}</aside>
+      {/* Layar besar: riwayat dapat diciutkan agar chat tetap menjadi bidang utama. */}
+      <aside className={`hidden shrink-0 transition-[width] duration-200 md:block ${ciut ? "w-14" : "w-72"}`}>
+        {ciut ? (
+          <div className="liquid-glass-subtle flex h-full w-14 flex-col items-center gap-2 rounded-2xl py-3">
+            <button
+              type="button"
+              onClick={() => setCiut(false)}
+              aria-label="Buka riwayat percakapan"
+              title="Buka riwayat"
+              className="flex size-10 items-center justify-center rounded-xl text-tinta transition-colors hover:bg-permukaan/70 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-utama"
+            >
+              <svg viewBox="0 0 20 20" fill="none" className="size-5" aria-hidden>
+                <path d="M4 5h12M4 10h12M4 15h8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+                <path d="m14 13 2 2-2 2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </button>
+            <span className="h-px w-7 bg-garis" aria-hidden />
+            <button
+              type="button"
+              onClick={onBaru}
+              aria-label="Buat percakapan baru"
+              title="Percakapan baru"
+              className="flex size-10 items-center justify-center rounded-xl bg-utama text-utama-teks shadow-kecil transition-all hover:shadow-sedang hover:brightness-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-utama active:scale-95"
+            >
+              <svg viewBox="0 0 20 20" fill="none" className="size-5" aria-hidden>
+                <path d="M10 4v12M4 10h12" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+              </svg>
+            </button>
+          </div>
+        ) : (
+          <div className="liquid-glass-subtle h-full overflow-hidden rounded-2xl">{isi}</div>
+        )}
+      </aside>
 
       {/* Layar kecil: tombol mengambang + panel geser */}
       <button

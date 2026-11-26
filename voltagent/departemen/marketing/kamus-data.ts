@@ -6,9 +6,9 @@
  * Dengan ditempel, pertanyaan sederhana cukup 1 tool call.
  *
  * Ini RINGKASAN. Sumber lengkapnya:
- *   docs/schema-auto.md   — struktur teknis (di-generate, `npm run gen:schema`)
- *   docs/kamus-data.md    — istilah bisnis & jebakan query
- *   docs/contoh-query.md  — 12 pasang pertanyaan->SQL yang sudah dites
+ *   docs/database/marketing/schema-auto.md   — struktur teknis (di-generate, `npm run gen:schema`)
+ *   docs/database/marketing/kamus-data.md    — istilah bisnis & jebakan query
+ *   docs/database/marketing/contoh-query.md  — 12 pasang pertanyaan->SQL yang sudah dites
  *
  * Kalau skema database berubah: jalankan `npm run gen:schema`, lalu
  * samakan daftar tabel di bawah dengan hasilnya.

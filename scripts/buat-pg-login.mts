@@ -16,7 +16,7 @@
  * Kalau hak menjalankan `cek_login_perusahaan` diberikan ke `ai_readonly`,
  * agent bisa menulis:
  *
- *     SELECT cek_login_perusahaan('budi@mustika-ratu.co.id', 'tebakan1')
+ *     SELECT cek_login_perusahaan('karyawan@contoh.co.id', 'tebakan1')
  *
  * Penjaga SQL kita memeriksa nama tabel di `FROM`/`JOIN`. Query di atas TIDAK
  * punya `FROM`, jadi akan **lolos** -- dan tool baca-data berubah jadi alat

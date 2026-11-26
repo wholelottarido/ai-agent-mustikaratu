@@ -2,10 +2,10 @@
  * Generator kamus data OTOMATIS.
  *
  * Baca struktur database dari information_schema, tulis jadi
- * docs/<departemen>/schema-auto.md. File ini di-generate ulang tiap kali
+ * docs/database/<departemen>/schema-auto.md. File ini di-generate ulang tiap kali
  * skema berubah -- JANGAN diedit manual.
  *
- * Penjelasan bisnis yang ditulis tangan ada di docs/<departemen>/kamus-data.md.
+ * Penjelasan bisnis yang ditulis tangan ada di docs/database/<departemen>/kamus-data.md.
  *
  * Jalankan: npm run gen:schema -- marketing
  */
@@ -133,10 +133,10 @@ for (const t of [...tables, ...views]) {
 }
 out.push('');
 
-mkdirSync(`docs/${dep.id}`, { recursive: true });
-writeFileSync(`docs/${dep.id}/schema-auto.md`, out.join('\n'), 'utf8');
+mkdirSync(`docs/database/${dep.id}`, { recursive: true });
+writeFileSync(`docs/database/${dep.id}/schema-auto.md`, out.join('\n'), 'utf8');
 console.log(
-  `OK -> docs/${dep.id}/schema-auto.md (${tables.length} tabel, ${views.length} view, ${columns.length} kolom, ${fks.length} relasi)`,
+  `OK -> docs/database/${dep.id}/schema-auto.md (${tables.length} tabel, ${views.length} view, ${columns.length} kolom, ${fks.length} relasi)`,
 );
 
 await conn.end();

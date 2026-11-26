@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+statsforecast
+pandas
+numpy
+psycopg[binary]
+python-dotenv

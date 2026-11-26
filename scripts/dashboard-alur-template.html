@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ratu AI Agent Workflow</title>
+<script>try{var t=localStorage.getItem('tema-dashboard');if(t==='dark'||t==='light')document.documentElement.dataset.theme=t}catch(e){}</script>
+<style>
+/*__CSS__*/
+:root{--w-embedding:#db2777;--w-db:#b45309;--w-orkestrasi:#c7d2fe;--w-delegasi:#c7d2fe;--w-permintaan:#e2e8f0;--g1:#64748b;--g2:#0f9d76;--g3:#4f46e5}
+:root[data-theme="dark"]{--w-embedding:#f472b6;--w-db:#f59e0b;--w-orkestrasi:#3730a3;--w-delegasi:#3730a3;--w-permintaan:#334155;--g1:#94a3b8;--g2:#34d399;--g3:#8b8ff9}
+.wfq{display:flex;flex-wrap:wrap;gap:6px}
+.cek-ok{color:var(--good);font-weight:700}.cek-no{color:var(--bad);font-weight:700}
+</style>
+</head>
+<body>
+<a class="skip" href="#isi">Lewati ke konten</a>
+<div class="app">
+  <aside class="side" aria-label="Navigasi">
+    <div class="brand"><div class="logo" aria-hidden="true">R</div><div><b>Ratu AI</b><small>Waktu tiap langkah agent</small></div></div>
+    <div><div class="grup">Laporan</div><nav class="nav" id="nav"></nav></div>
+    <div class="bawah"><div class="grup">Lainnya</div><div class="nav">
+      <button type="button" id="ke-dash"><svg viewBox="0 0 24 24"><path d="M4 13h6V4H4zM14 20h6V11h-6zM4 20h6v-3H4zM14 7h6V4h-6z"/></svg>Dashboard utama</button></div></div>
+  </aside>
+  <main id="isi" tabindex="-1">
+    <div class="mtabs" id="mtabs" role="navigation" aria-label="Navigasi"></div>
+    <header class="top">
+      <div>
+        <h1>Ratu AI — Ke mana waktu jawab habis</h1>
+        <p class="sub">Uji Agent Workflow Latency · model Qwen3-14B-AWQ di 1 GPU NVIDIA A10G 24 GB · vLLM, maks. 4 permintaan diproses sekaligus (max-num-seqs 4) · LiteLLM · langsung ke agent, tanpa lewat portal</p>
+        <div class="badges"><span class="badge hist" id="badge-tgl"></span><span class="badge agent">Waktu dicatat per langkah (span)</span><span class="badge">Hasil uji tersimpan, bukan pantauan langsung</span></div>
+      </div>
+      <div class="aksi">
+        <button class="btn" type="button" id="cetak"><svg viewBox="0 0 24 24"><path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M8 14h8v7H8z"/></svg>Cetak / PDF</button>
+        <button class="btn" type="button" id="tema" aria-pressed="false">Tema gelap</button>
+      </div>
+    </header>
+    <section class="view" id="v-ringkas"></section>
+    <section class="view" id="v-tahap" hidden></section>
+    <section class="view" id="v-wf" hidden></section>
+    <section class="view" id="v-skenario" hidden></section>
+    <section class="view" id="v-q45" hidden></section>
+    <section class="view" id="v-metode" hidden></section>
+    <p class="foot" id="foot"></p>
+  </main>
+</div>
+<div id="tip" role="tooltip"></div>
+<script>
+"use strict";
+const DATA = /*__DATA__*/null;
+/*__HELPER__*/
+const R = DATA.r, B = DATA.baris, KAT = R.kategori, NK = R.nama_kategori, TX = R.teks || {};
+const GRUP = ["berurutan"].concat(R.info.tahap.map(n => "beban-" + n)).filter(g => R.grup[g]);
+const LBL = g => g === "berurutan" ? "Satu per satu (patokan)" : `${g.split("-")[1]} pengguna`;
+const LBLP = g => g === "berurutan" ? "Patokan" : g.split("-")[1];
+const KODE = ["Q1", "Q2", "Q3", "Q4", "Q5", "Q6", "Q7", "Q8"];
+const MODEL_K = ["tunggu", "berpikir", "rencana", "menulis", "ekor"], ALAT_K = ["embedding", "db", "alat"];
+const sumK = (o, ks) => ks.reduce((a, k) => a + (o["x_" + k] || 0), 0);
+const totX = o => sumK(o, KAT);
+const kpiNa = (l, why) => kpi(l, `<span class="na" style="font-size:16px">tidak bisa diukur</span>`, "", why);
+const tanggal = (() => { const t = B.length ? new Date(Math.min(...B.map(b => b.mulai)) + 7 * 3600e3) : null; return t ? `${t.getUTCDate()} Nov ${t.getUTCFullYear()}` : "—"; })();
+$("#badge-tgl").textContent = `Hasil uji · ${tanggal}`;
+const intinya = k => TX[k] ? `<p class="interpret"><b>Intinya:</b> ${esc(TX[k])}</p>` : "";
+
+/* =================================================================== RINGKASAN */
+function vRingkas() {
+  const s = R.grup.berurutan, g8 = R.grup["beban-8"] || {}, J = R.jumlah;
+  const target = 8 * R.info.ulang + R.info.tahap.reduce((a, n) => a + 3 * n, 0);
+  const jalan = GRUP.reduce((a, g) => a + R.grup[g].n, 0);
+  const benar = GRUP.reduce((a, g) => a + R.grup[g].benar, 0);
+  const el = $("#v-ringkas");
+  el.innerHTML = `<h2 style="margin-top:0">Ringkasan</h2>
+  <div class="card hero"><p>${esc(TX.ringkasan || "")}</p><p class="ket">Cara membaca angka di laporan ini:</p><ul class="list">
+    <li><b>Patokan (baseline)</b> — pertanyaan dikirim satu per satu, jadi tidak ada yang antre.</li>
+    <li><b>Waktu tengah (P50)</b> — separuh pertanyaan selesai lebih cepat dari angka ini.</li>
+    <li><b>P95</b> — 95 dari 100 pertanyaan selesai lebih cepat dari angka ini.</li>
+    <li><b>Waktu eksklusif</b> — waktu yang benar-benar dipakai satu bagian itu sendiri, tanpa langkah di dalamnya. Jadi tidak ada waktu yang terhitung dua kali.</li>
+    <li><b>Token</b> — potongan kata yang dibaca atau ditulis model.</li></ul>
+    <p class="batas">Batasan: Uji ini hanya satu sesi. Pertanyaannya tetap dan memakai satu akun. Model dan setelannya tidak diubah. 8 pertanyaan pemanasan tidak ikut dihitung. P95 tiap tahap hanya dihitung dari 3–40 pertanyaan.</p></div>
+  ${R.stop.length ? `<div class="caveat"><b>Uji dihentikan:</b> ${esc(R.stop.map(x => x.alasan).join("; "))}. Hasil yang sempat terkumpul ditampilkan apa adanya.</div>` : ""}
+  <div class="kpis">
+    ${kpi("Pertanyaan selesai diuji", `${jalan}/${target}`, "", `${s.n} satu per satu + ${GRUP.filter(g => g !== "berurutan").map(g => R.grup[g].n).join("/")} saat ramai · ${benar} lolos kriteria benar`)}
+    ${kpi("Satu per satu: P50 / P95", `${nf(s.p50)} / ${nf(s.p95)}`, "dtk", `${s.n} pertanyaan · rata-rata ${nf(s.rata)} dtk`)}
+    ${kpi("8 pengguna sekaligus: P50 / P95", `${nf(g8.p50)} / ${nf(g8.p95)}`, "dtk", `${g8.n || 0} pertanyaan · ${g8.habis || 0} kehabisan waktu · ${g8.ok || 0} terjawab`, g8.p50 ? delta(g8.p50 > s.p50 ? "bad" : "good", `${g8.p50 > s.p50 ? "▲" : "▼"} ${nf(100 * (g8.p50 / s.p50 - 1), 0)}% dibanding patokan (P50)`) : "")}
+    ${kpi("Panggilan model per pertanyaan", nf(s.llm), "", `patokan · paling sedikit ${s.llm_min}, paling banyak ${s.llm_max} · ${nf0(s.masuk)} token masuk, ${nf0(s.keluar)} keluar`)}
+    ${kpi("Porsi waktu di model", nf0(100 * sumK(s, MODEL_K) / totX(s)), "%", `patokan · khusus berpikir ${nf0(100 * s.x_berpikir / totX(s))}% · ≈ ${nf0(s.pikir)} token berpikir per pertanyaan`)}
+    ${kpi("Porsi waktu alat, database, cari SOP", nf(100 * sumK(s, ALAT_K) / totX(s)), "%", `patokan · persiapan agent ${nf(100 * s.x_persiapan / totX(s))}%`)}
+  </div>
+  <div class="card"><h3>Waktu jawab per tahap</h3><p class="ket">Waktu dari pertanyaan dikirim sampai jawaban selesai. Tahap = berapa pengguna bertanya bersamaan. Arahkan kursor ke titik untuk melihat jumlah pertanyaannya.</p>
+    <div class="ctl"><span id="rk-m"></span></div><div class="chart" id="rk-c"></div>${intinya("tahap")}</div>
+  <div class="card"><h3>Apa yang paling memperlambat</h3><p class="ket">Rata-rata waktu eksklusif per pertanyaan, dalam detik. Urutannya menurut porsi saat satu per satu. Kolom 8 pengguna menunjukkan bagian mana yang membengkak saat ramai.</p><div id="rk-t"></div>${intinya("ranking")}</div>`;
+  let m = "p50";
+  const g = pasang($("#rk-c"), w => garis(w, { xs: GRUP.map(LBL), xsPendek: GRUP.map(LBLP), xJudul: "tahap", yJudul: "detik", aria: "Waktu jawab per tahap", kanan: 70,
+    series: [["p50", "P50", "--g3", false], ["p95", "P95", "--g3", true], ["rata", "Rata-rata", "--g2", false]].filter(x => m === "semua" || x[0] === m || (m === "p50" && x[0] === "p95")).map(([k, n, wr, put]) => ({ nama: n, warna: wr, putus: put,
+      nilai: GRUP.map(g => R.grup[g][k]), tips: GRUP.map(g => `${LBL(g)} · ${n}: ${nf(R.grup[g][k])} dtk\n${R.grup[g].n} pertanyaan · ${R.grup[g].ok} terjawab · ${R.grup[g].benar} benar`) })) }));
+  segmen($("#rk-m"), [["p50", "P50 & P95"], ["rata", "Rata-rata"], ["semua", "Semua"]], m, k => { m = k; gambarUlang(g); }, "Pilih metrik");
+  const s8 = R.grup["beban-8"];
+  tabel($("#rk-t"), { judul: "Urutan penghambat", berkas: "ranking-penghambat", cari: false,
+    kol: [{ key: "no", label: "#", num: true }, { key: "k", label: "Bagian" }, { key: "b", label: "Patokan (dtk)", num: true, f: v => nf(v) }, { key: "pb", label: "Porsi patokan", num: true, f: v => nf0(v) + "%" },
+      { key: "e", label: "8 pengguna (dtk)", num: true, f: v => nf(v) }, { key: "pe", label: "Porsi 8 pengguna", num: true, f: v => nf0(v) + "%" }, { key: "d", label: "Selisih (dtk)", num: true, f: v => (v > 0 ? "+" : "") + nf(v) }],
+    rows: KAT.map(k => ({ k: NK[k], b: s["x_" + k], pb: 100 * s["x_" + k] / totX(s), e: s8 ? s8["x_" + k] : null, pe: s8 ? 100 * s8["x_" + k] / totX(s8) : null, d: s8 ? s8["x_" + k] - s["x_" + k] : null }))
+      .sort((a, b) => b.b - a.b).map((x, i) => Object.assign(x, { no: i + 1 })) });
+}
+
+/* =================================================================== TAHAP BEBAN */
+const MT = {
+  p50: ["Waktu tengah (P50)", "detik", g => R.grup[g].p50, 1], p95: ["P95 waktu jawab", "detik", g => R.grup[g].p95, 1], rata: ["Rata-rata waktu jawab", "detik", g => R.grup[g].rata, 1],
+  llm: ["Panggilan model per pertanyaan", "panggilan", g => R.grup[g].llm, 1],
+  antre: ["vLLM: lama antre per panggilan", "milidetik", g => (R.vllm[g === "berurutan" ? "berurutan" : g.split("-")[1]] || {}).antre_ms, 0],
+  decode: ["vLLM: lama menulis per panggilan", "milidetik", g => (R.vllm[g === "berurutan" ? "berurutan" : g.split("-")[1]] || {}).decode_ms, 0],
+  kv: ["Memori kerja model maks (KV cache)", "%", g => (R.vllm_log[g === "berurutan" ? "berurutan" : g.split("-")[1]] || {}).kv_maks, 1],
+  watt: ["Daya GPU rata-rata", "watt", g => (R.gpu[g === "berurutan" ? "berurutan" : g.split("-")[1]] || {}).watt, 0],
+};
+function vTahap() {
+  const el = $("#v-tahap");
+  el.innerHTML = `<h2 style="margin-top:0">Tahap beban: 1 sampai 8 pengguna</h2>
+  <p class="lead">Patokan: 8 pertanyaan diulang ${R.info.ulang} kali, dikirim satu per satu. Tahap beban: beberapa pengguna tiruan bertanya bersamaan. Tiap pengguna mengirim 3 pertanyaan berurutan, dengan jeda 5 detik. Polanya sama dengan <code>scripts/uji-beban.mts</code>. Antar tahap ada jeda ${R.info.jeda_tahap_ms / 1000} detik, dimulai setelah antrean (queue) di vLLM kosong.</p>
+  <div class="card"><h3>Ke mana waktunya habis per tahap</h3><p class="ket">Rata-rata waktu eksklusif per pertanyaan, dalam detik. Satu warna = satu bagian. Panjang seluruh batang = rata-rata waktu jawab.</p>
+    ${legendaK(KAT)}<div class="chart" id="th-c1"></div>${intinya("komposisi")}</div>
+  <div class="card"><h3>Angka lain per tahap</h3><div class="ctl"><span id="th-m"></span></div><div class="chart" id="th-c2"></div><p class="ket" id="th-k"></p></div>
+  <div class="card"><h3>Tabel lengkap per tahap</h3><div id="th-t"></div></div>
+  <div class="card"><h3>Server model (vLLM) dan GPU per tahap</h3><p class="ket">Prefill = model membaca prompt. Decode = model menulis jawaban. Angka antre, prefill, dan decode adalah rata-rata semua panggilan di tahap itu. Angkanya dari selisih penghitung vLLM sebelum dan sesudah tahap. KV cache dan antrean maks dari log vLLM, yang dicatat tiap ±10 detik. Data GPU dibaca dari nvidia-smi tiap 0,5 detik.</p><div id="th-v"></div></div>`;
+  pasang($("#th-c1"), w => tumpuk(w, { kunci: KAT, nama: NK, satuan: "dtk", xJudul: "detik (rata-rata per pertanyaan)", aria: "Komposisi per tahap",
+    rows: GRUP.map(g => ({ label: LBL(g), bag: Object.fromEntries(KAT.map(k => [k, R.grup[g]["x_" + k]])) })) }));
+  let m = "p50";
+  const g2 = pasang($("#th-c2"), w => { const [n, y, f, d] = MT[m];
+    return batang(w, { xs: GRUP.map(LBLP), xJudul: "tahap (pengguna bersamaan)", yJudul: y, aria: n, desimal: d,
+      series: [{ nama: n, warna: "--g3", nilai: GRUP.map(f), tips: GRUP.map(g => `${LBL(g)}\n${n}: ${f(g) == null ? "tidak tersedia" : nf(f(g), d)} ${y}\n${R.grup[g].n} pertanyaan`) }] }); });
+  const ket = { antre: "Rata-rata lama tiap panggilan model menunggu giliran di vLLM sebelum diproses.", decode: "Rata-rata lama vLLM menulis jawaban per panggilan (decode).", kv: "Pemakaian tertinggi memori kerja model (KV cache), dalam persen. Ini bukan memori GPU yang dipesan.", llm: "Kalau jumlah panggilan naik, waktu jawab ikut naik walau modelnya sama cepat." };
+  segmen($("#th-m"), Object.entries(MT).map(([k, v]) => { const t = v[0].replace("vLLM: ", ""); return [k, t[0].toUpperCase() + t.slice(1)]; }), m, k => { m = k; gambarUlang(g2); $("#th-k").textContent = ket[k] || ""; }, "Pilih metrik");
+  const s = R.grup.berurutan;
+  tabel($("#th-t"), { judul: "Per tahap", berkas: "per-tahap", cari: false,
+    kol: [{ key: "g", label: "Tahap" }, { key: "n", label: "Pertanyaan", num: true }, { key: "ok", label: "Terjawab", num: true }, { key: "benar", label: "Benar", num: true }, { key: "habis", label: "Kehabisan waktu", num: true }, { key: "galat", label: "Galat", num: true },
+      { key: "p50", label: "P50", num: true, f: v => nf(v) }, { key: "p95", label: "P95", num: true, f: v => nf(v) }, { key: "rata", label: "Rata-rata", num: true, f: v => nf(v) }, { key: "min", label: "Min", num: true, f: v => nf(v) }, { key: "max", label: "Maks", num: true, f: v => nf(v) },
+      { key: "dp", label: "P50 vs patokan", num: true, f: v => v == null ? "—" : (v > 0 ? "+" : "") + nf0(v) + "%" }, { key: "llm", label: "Panggilan model", num: true, f: v => nf(v) }, { key: "lg", label: "Panggilan gagal/ulang", num: true }, { key: "masuk_total", label: "Token masuk (total)", num: true, f: nf0 }, { key: "keluar_total", label: "Token keluar (total)", num: true, f: nf0 }],
+    rows: GRUP.map(g => Object.assign({ g: LBL(g), dp: g === "berurutan" ? null : 100 * (R.grup[g].p50 / s.p50 - 1), lg: R.grup[g].llm_galat }, R.grup[g])) });
+  tabel($("#th-v"), { judul: "vLLM & GPU per tahap", berkas: "vllm-gpu-per-tahap", cari: false,
+    kol: [{ key: "g", label: "Tahap" }, { key: "n", label: "Permintaan vLLM", num: true, f: nf0 }, { key: "antre_ms", label: "Antre (ms)", num: true, f: nf0 }, { key: "prefill_ms", label: "Baca prompt / prefill (ms)", num: true, f: nf0 }, { key: "decode_ms", label: "Menulis / decode (ms)", num: true, f: nf0 },
+      { key: "ttft_ms", label: "TTFT vLLM (ms)", num: true, f: nf0 }, { key: "cache", label: "Prompt dari cache", num: true, f: v => v == null ? "—" : nf0(100 * v) + "%" }, { key: "preemption", label: "Disela (preemption)", num: true, f: nf0 },
+      { key: "kv", label: "KV maks", num: true, f: v => v == null ? "—" : nf(v) + "%" }, { key: "am", label: "Antre maks", num: true, f: nf0 }, { key: "w", label: "Daya (W)", num: true, f: nf0 }, { key: "su", label: "Suhu maks", num: true, f: nf0 }],
+    rows: GRUP.map(g => { const k = g === "berurutan" ? "berurutan" : g.split("-")[1], v = R.vllm[k] || {}, l = R.vllm_log[k] || {}, gp = R.gpu[k] || {};
+      return Object.assign({ g: LBL(g), kv: l.kv_maks, am: l.antre_maks, w: gp.watt, su: gp.suhu_maks }, v); }) });
+}
+const legendaK = ks => `<div class="leg">${ks.map(k => `<span><i style="background:var(--w-${k})"></i>${esc(NK[k])}</span>`).join("")}</div>`;
+
+/* =================================================================== WATERFALL */
+const WARNA_SPAN = { persiapan: "--w-persiapan", delegasi: "--w-orkestrasi", alat: "--w-alat", db: "--w-db", embedding: "--w-embedding" };
+function wfSpan(w, q) {
+  const rows = q.span.map(s => ({ s, label: (s.jenis === "llm" ? `${s.nama}${s.masuk ? ` · ${nf0(s.masuk)}→${nf0(s.keluar)} tok` : ""}` : s.jenis === "delegasi" ? "Delegasi (delegate_task)" : s.jenis === "db" ? "Query database" : s.jenis === "embedding" ? "Cari SOP (embedding)" : s.jenis === "persiapan" ? "Persiapan agent" : `Alat ${s.nama}`) }));
+  const L = Math.min(300, w * .44), Rr = 18, Tp = 6, tg = 21, H = Tp + rows.length * tg + 44;
+  const top = Math.max(q.total, ...q.span.map(s => s.a + s.d)) * 1.02, { lg } = skala(top, w < 500 ? 4 : 8), xp = t => L + (w - L - Rr) * t / top;
+  let o = "";
+  for (let v = 0; v <= top + 1e-9; v += lg) o += `<line class="gl" x1="${xp(v)}" x2="${xp(v)}" y1="${Tp}" y2="${H - 38}"/><text class="ax" x="${xp(v)}" y="${H - 24}" text-anchor="middle">${nf(v, Number.isInteger(lg) ? 0 : 1)}</text>`;
+  o += `<line x1="${xp(q.total)}" x2="${xp(q.total)}" y1="${Tp}" y2="${H - 38}" stroke="var(--ink2)" stroke-dasharray="3 3"/>`;
+  rows.forEach(({ s, label }, i) => {
+    const y = Tp + i * tg + 3, ind = Math.min(s.dalam, 4) * 10;
+    const maks = Math.max(10, Math.floor((L - 12) / 5.6)), lab = (s.dalam > 1 ? "└ " : "") + label;
+    o += `<text class="ax" x="${L - 8}" y="${y + 11}" text-anchor="end">${esc(lab.length > maks ? lab.slice(0, maks - 1) + "…" : lab)}</text>`;
+    const t = (nm, a, b) => `${label}\n${nm}: ${nf(b - a, 2)} dtk (detik ${nf(a)}–${nf(b)})${s.status !== "ok" ? `\nstatus: ${s.status}` : ""}${s.jenis === "llm" && s.lt_ttft != null ? `\nTTFT LiteLLM: ${nf0(s.lt_ttft)} ms · TTFT klien: ${nf0(1000 * s.ttft)} ms` : ""}`;
+    if (s.jenis === "llm") {
+      o += `<rect x="${xp(s.a)}" y="${y}" width="${Math.max(1.5, xp(s.a + s.d) - xp(s.a))}" height="${tg - 8}" rx="2" fill="var(--w-ekor)" class="pt" data-tip="${esc(t("panggilan model", s.a, s.a + s.d))}"/>`;
+      o += `<rect x="${xp(s.a)}" y="${y}" width="${Math.max(1, xp(s.a + s.ttft) - xp(s.a))}" height="${tg - 8}" rx="2" fill="var(--w-tunggu)" class="pt" data-tip="${esc(t("menunggu kata pertama", s.a, s.a + s.ttft))}"/>`;
+      s.seg.forEach(([k, a, b]) => o += `<rect x="${xp(s.a + a)}" y="${y}" width="${Math.max(1, xp(s.a + b) - xp(s.a + a))}" height="${tg - 8}" rx="2" fill="var(--w-${k})" class="pt" data-tip="${esc(t(NK[k] || k, s.a + a, s.a + b))}"/>`);
+    } else o += `<rect x="${xp(s.a)}" y="${y + (s.jenis === "delegasi" ? 3 : 0)}" width="${Math.max(1.5, xp(s.a + s.d) - xp(s.a))}" height="${tg - 8 - (s.jenis === "delegasi" ? 6 : 0)}" rx="2" fill="var(${WARNA_SPAN[s.jenis] || "--w-lain"})" class="pt" data-tip="${esc(t(s.jenis, s.a, s.a + s.d))}"/>`;
+  });
+  o += `<text class="axt" x="${(L + w - Rr) / 2}" y="${H - 6}" text-anchor="middle">${w < 560 ? `detik · selesai ${nf(q.total)} dtk` : `detik sejak pertanyaan dikirim · garis putus = jawaban selesai (${nf(q.total)} dtk)`}</text>`;
+  return `<svg viewBox="0 0 ${w} ${H}" width="${w}" height="${H}" role="img" aria-label="Waterfall ${esc(q.kode)}">${o}</svg>`;
+}
+function vWf() {
+  const el = $("#v-wf");
+  el.innerHTML = `<h2 style="margin-top:0">Urutan langkah per pertanyaan</h2>
+  <p class="lead">Grafik ini disebut waterfall: urutan langkah dari awal sampai jawaban selesai. Satu baris = satu span, yaitu satu langkah yang dicatat waktunya. Baris diurutkan menurut waktu mulai. Langkah yang berjalan bersamaan tampil di baris terpisah. Delegasi (biru muda, <i>delegate_task</i>) adalah saat perute menyerahkan pertanyaan ke agent aplikasi. Baris delegasi mencakup panggilan model agent aplikasi beserta alatnya. Query database dan cari SOP (embedding) terjadi di dalam alat atau persiapan.</p>
+  <div class="card"><div class="ctl"><label>Tahap <select id="wf-g">${GRUP.map(g => `<option value="${g}">${LBL(g)}</option>`).join("")}</select></label>
+    <label>Pertanyaan <select id="wf-k">${KODE.map(k => `<option value="${k}">${k} ${esc(R.jenis[k] || "")}</option>`).join("")}</select></label>
+    <label>Percobaan <select id="wf-t"></select></label><span class="wfq" id="wf-cepat"></span></div>
+    <div class="leg"><span><i style="background:var(--w-persiapan)"></i>Persiapan</span><span><i style="background:var(--w-tunggu)"></i>Menunggu kata pertama</span><span><i style="background:var(--w-berpikir)"></i>Berpikir</span><span><i style="background:var(--w-rencana)"></i>Merencanakan alat</span><span><i style="background:var(--w-menulis)"></i>Menulis</span><span><i style="background:var(--w-orkestrasi)"></i>Delegasi</span><span><i style="background:var(--w-alat)"></i>Alat</span><span><i style="background:var(--w-db)"></i>Query database</span><span><i style="background:var(--w-embedding)"></i>Cari SOP</span></div>
+    <p class="ket" id="wf-info"></p><div class="chart" id="wf-c"></div>
+    <details class="raw"><summary>Rincian waktu eksklusif percobaan ini</summary><div id="wf-x"></div></details>${intinya("waterfall")}</div>`;
+  const isiT = () => { const g = $("#wf-g").value, k = $("#wf-k").value;
+    const rs = R.waterfall.filter(q => (q.fase === "berurutan" ? "berurutan" : "beban-" + q.tahap) === g && q.kode === k).sort((a, b) => a.total - b.total);
+    const m = median(rs.map(q => q.total)), dek = rs.reduce((a, q) => a == null || Math.abs(q.total - m) < Math.abs(a.total - m) ? q : a, null);
+    $("#wf-t").innerHTML = rs.length ? rs.map(q => `<option value="${q.trace}" ${q === dek ? "selected" : ""}>${q.fase === "berurutan" ? `ulangan ke-${q.ulang}` : `pengguna ${q.pemakai}`} · ${nf(q.total)} dtk · ${q.status === "ok" ? (q.benar ? "benar" : "kurang tepat") : q.status}</option>`).join("") : `<option value="">(tidak ada di tahap ini)</option>`; };
+  const g = pasang($("#wf-c"), w => { const q = R.waterfall.find(x => x.trace === $("#wf-t").value); if (!q) return `<p class="na">Pertanyaan ini tidak ditanyakan di tahap yang dipilih.</p>`;
+    $("#wf-info").textContent = `trace ${q.trace} · ${q.kode} ${q.jenis} · ${nf(q.total)} dtk · ${q.n_llm} panggilan model · alat: ${q.alat ? q.alat.split("|").join(", ") : "—"} · ${q.status}${q.benar ? ", benar" : ", kurang tepat"}`;
+    tabel($("#wf-x"), { judul: "Rincian waktu eksklusif", berkas: `pecahan-${q.trace}`, cari: false, kol: [{ key: "k", label: "Bagian" }, { key: "v", label: "Detik", num: true, f: v => nf(v, 2) }, { key: "p", label: "Porsi", num: true, f: v => nf0(v) + "%" }],
+      rows: KAT.map(k => ({ k: NK[k], v: q.bag[k], p: 100 * q.bag[k] / q.total })).filter(x => x.v > 0) });
+    return wfSpan(w, q); });
+  const ulang = () => { isiT(); gambarUlang(g); };
+  $("#wf-g").addEventListener("change", ulang); $("#wf-k").addEventListener("change", ulang); $("#wf-t").addEventListener("change", () => gambarUlang(g));
+  $("#wf-cepat").innerHTML = ["Q1", "Q4", "Q5", "Q8"].map(k => `<button class="btn" type="button" data-k="${k}">${k}</button>`).join("");
+  $("#wf-cepat").addEventListener("click", e => { const b = e.target.closest("button"); if (!b) return; $("#wf-k").value = b.dataset.k; ulang(); });
+  ulang();
+}
+
+/* =================================================================== PER SKENARIO */
+function vSkenario() {
+  const el = $("#v-skenario");
+  el.innerHTML = `<h2 style="margin-top:0">Per jenis pertanyaan (Q1–Q8)</h2>
+  <div class="ctl"><span class="lbl">Tahap</span><span id="sk-g"></span></div>
+  <div class="card"><h3>Angka per pertanyaan</h3><div id="sk-t"></div></div>
+  <div class="card"><h3>Ke mana waktunya habis, per pertanyaan</h3><p class="ket">Rata-rata waktu eksklusif, dalam detik.</p>${legendaK(KAT)}<div class="chart" id="sk-c"></div>${intinya("skenario")}</div>
+  <div class="grid2"><div class="card"><h3>Per jenis panggilan model</h3><p class="ket">Angka di sini adalah waktu tengah tiap jenis. TTFT — waktu sampai kata pertama muncul. TTFT klien diukur di laptop, sejak permintaan dikirim. TTFT LiteLLM diambil dari catatan gateway LiteLLM. Keduanya tidak sama dengan TTFT di dalam vLLM.</p><div id="sk-p"></div>${intinya("peran")}</div>
+  <div class="card"><h3>Alat, database, cari SOP</h3><p class="ket">Lama tiap langkah (span). Query database di sini hanya yang terjadi di dalam alat.</p><div id="sk-a"></div>${intinya("alat")}</div></div>`;
+  let g = "berurutan";
+  const c = pasang($("#sk-c"), w => tumpuk(w, { kunci: KAT, nama: NK, satuan: "dtk", xJudul: "detik (rata-rata)", aria: "Komposisi per pertanyaan",
+    rows: KODE.filter(k => R.per_kode[g][k]).map(k => ({ label: `${k} ${R.jenis[k]}`, bag: Object.fromEntries(KAT.map(x => [x, R.per_kode[g][k]["x_" + x]])) })) }));
+  const isi = () => {
+    tabel($("#sk-t"), { judul: "Per pertanyaan", berkas: `skenario-${g}`, cari: false,
+      kol: [{ key: "q", label: "Pertanyaan" }, { key: "n", label: "Jumlah", num: true }, { key: "ok", label: "Terjawab", num: true }, { key: "benar", label: "Benar", num: true }, { key: "p50", label: "P50", num: true, f: v => nf(v) }, { key: "p95", label: "P95", num: true, f: v => nf(v) }, { key: "rata", label: "Rata-rata", num: true, f: v => nf(v) }, { key: "min", label: "Min", num: true, f: v => nf(v) }, { key: "max", label: "Maks", num: true, f: v => nf(v) },
+        { key: "llm", label: "Panggilan model", num: true, f: (v, r) => `${nf(v)} (${r.llm_min}–${r.llm_max})` }, { key: "masuk", label: "Token masuk", num: true, f: nf0 }, { key: "keluar", label: "Token keluar", num: true, f: nf0 }, { key: "pikir", label: "≈ token berpikir", num: true, f: nf0 }, { key: "alat_s", label: "Alat (dtk)", num: true, f: v => nf(v, 2) }],
+      rows: KODE.filter(k => R.per_kode[g][k]).map(k => Object.assign({ q: `${k} ${R.jenis[k]}` }, R.per_kode[g][k])) });
+    tabel($("#sk-p"), { judul: "Jenis panggilan", berkas: `jenis-panggilan-${g}`, cari: false,
+      kol: [{ key: "p", label: "Jenis" }, { key: "n", label: "Jumlah", num: true }, { key: "dur", label: "Lama (dtk)", num: true, f: v => nf(v / 1000) }, { key: "ttft", label: "TTFT klien (ms)", num: true, f: nf0 }, { key: "lt_ttft", label: "TTFT LiteLLM (ms)", num: true, f: nf0 },
+        { key: "pikir", label: "Berpikir (dtk)", num: true, f: v => nf(v / 1000) }, { key: "masuk", label: "Token masuk", num: true, f: nf0 }, { key: "keluar", label: "Token keluar", num: true, f: nf0 }, { key: "porsi_pikir", label: "≈ porsi berpikir", num: true, f: v => nf0(100 * v) + "%" }, { key: "transport", label: "Jaringan + gateway (ms)", num: true, f: nf0 }],
+      rows: Object.entries(R.peran[g] || {}).map(([p, v]) => Object.assign({ p }, v)) });
+    tabel($("#sk-a"), { judul: "Alat", berkas: `alat-${g}`, cari: false, kol: [{ key: "j", label: "Jenis" }, { key: "a", label: "Nama" }, { key: "n", label: "Jumlah", num: true }, { key: "p50", label: "P50 (ms)", num: true, f: nf0 }, { key: "p95", label: "P95 (ms)", num: true, f: nf0 }, { key: "max", label: "Maks (ms)", num: true, f: nf0 }],
+      rows: Object.entries(R.alat[g] || {}).map(([k, v]) => { const [j, a] = k.split("|"); return Object.assign({ j, a }, v); }) });
+    gambarUlang(c); };
+  segmen($("#sk-g"), GRUP.map(x => [x, LBLP(x)]), g, k => { g = k; isi(); }, "Pilih tahap");
+  isi();
+}
+
+/* =================================================================== Q4/Q5 */
+function vQ45() {
+  const el = $("#v-q45");
+  el.innerHTML = `<h2 style="margin-top:0">Q4 SOP dan Q5 rancangan tiket</h2>
+  <p class="lead">Halaman ini memuat setiap percobaan Q4 dan Q5 di semua tahap. Yang ditampilkan: alat yang dipakai, jumlah panggilan model, dan jumlah delegasi. Delegasi = perute menyerahkan pertanyaan ke agent aplikasi. Lebih dari satu delegasi berarti rutenya diulang. Ditampilkan juga panggilan model yang gagal atau diulang, waktu cari SOP dan database, serta statusnya. Q5 hanya menyusun rancangan tiket. Selisih jumlah tiket di database sebelum dan sesudah uji: +${R.tiket_baru}.</p>
+  <div class="card"><h3>Ringkasan per tahap</h3><div id="q-r"></div>${intinya("q45")}</div>
+  <div class="card"><h3>Semua percobaan Q4/Q5</h3><div id="q-t"></div></div>`;
+  const rows = GRUP.flatMap(g => (R.q45[g] || []).map(x => Object.assign({ g: LBL(g), gk: g }, x)));
+  tabel($("#q-r"), { judul: "Q4/Q5 per tahap", berkas: "q4q5-ringkas", cari: false,
+    kol: [{ key: "g", label: "Tahap" }, { key: "k", label: "Pertanyaan" }, { key: "n", label: "Jumlah", num: true }, { key: "b", label: "Benar", num: true }, { key: "h", label: "Kehabisan waktu", num: true }, { key: "p", label: "P50 (dtk)", num: true, f: v => nf(v) }, { key: "m", label: "Maks (dtk)", num: true, f: v => nf(v) }, { key: "l", label: "Rata-rata panggilan model", num: true, f: v => nf(v) }, { key: "d", label: "Delegasi maks", num: true }, { key: "jalur", label: "Jalur alat", wrap: true }],
+    rows: GRUP.flatMap(g => ["Q4", "Q5"].map(k => { const x = (R.q45[g] || []).filter(y => y.kode === k); if (!x.length) return null; const jl = {}; x.forEach(y => { const a = y.alat ? y.alat.split("|").join(" → ") : "(tanpa alat)"; jl[a] = (jl[a] || 0) + 1; });
+      return { g: LBL(g), k, n: x.length, b: x.filter(y => y.benar).length, h: x.filter(y => y.status === "waktu-habis").length, p: median(x.map(y => y.total)), m: Math.max(...x.map(y => y.total)), l: x.reduce((a, y) => a + y.n_llm, 0) / x.length, d: Math.max(...x.map(y => y.delegasi)), jalur: Object.entries(jl).map(([a, c]) => `${a} ×${c}`).join("; ") }; })).filter(Boolean) });
+  tabel($("#q-t"), { judul: "Percobaan Q4/Q5", berkas: "q4q5-semua", kol: [{ key: "g", label: "Tahap" }, { key: "kode", label: "Q" }, { key: "trace", label: "Trace" }, { key: "total", label: "Detik", num: true, f: v => nf(v) }, { key: "status", label: "Status" }, { key: "benar", label: "Benar", html: v => v ? `<span class="ok">ya</span>` : `<span class="no">tidak</span>` },
+    { key: "alat", label: "Alat", f: v => v ? v.split("|").join(" → ") : "—" }, { key: "n_llm", label: "Panggilan model", num: true }, { key: "n_llm_galat", label: "Gagal/ulang", num: true }, { key: "delegasi", label: "Delegasi", num: true }, { key: "embedding_ms", label: "Cari SOP (ms)", num: true, f: nf0 }, { key: "db_ms", label: "Database di alat (ms)", num: true, f: nf0 }], rows });
+}
+
+/* =================================================================== METODOLOGI & CEK */
+function vMetode() {
+  const el = $("#v-metode"), I = R.info;
+  el.innerHTML = `<h2 style="margin-top:0">Cara uji, pemeriksaan, dan batasan</h2>
+  <div class="card"><h3>Pemeriksaan kewajaran data</h3><p class="ket">Pemeriksaan otomatis (sanity check) untuk memastikan datanya utuh dan masuk akal.</p><div id="m-c"></div></div>
+  <div class="card"><h3>Cara mengukur</h3><ul class="list">
+    <li>Pemeriksaan sebelum mulai: vLLM <code>/health</code>=${esc(I.sehat.vllm_health)}, antrean kosong=${esc(I.sehat.vllm_kosong)}, LiteLLM <code>/models</code>=${esc(I.sehat.litellm)}, jalur agent=${esc(I.sehat.jalur_agent)}.</li>
+    <li>Waktu tiap langkah (span) dicatat oleh <code>lib/profil-agent.ts</code>. Pencatat ini mati secara bawaan. Ia hanya dinyalakan di proses uji, lewat <code>AGENT_PROFILING_ENABLED=1</code>. Yang dicatat: permintaan, persiapan, setiap panggilan model (per percobaan HTTP), alat, query database, dan cari SOP (embedding). Delegasi dibaca dari aliran event tingkat atas. Lama tiap langkah diukur dengan jam yang tidak bisa mundur (monotonic). Jam biasa hanya dipakai untuk mencocokkan dengan catatan LiteLLM dan vLLM.</li>
+    <li>Waktu eksklusif: tiap potongan waktu diberikan ke satu bagian saja, yang paling spesifik. Urutannya: cari SOP &gt; database &gt; alat &gt; model &gt; persiapan &gt; orkestrasi (delegasi) &gt; lain-lain. Jumlah semua bagian = waktu jawab.</li>
+    <li>Jumlah token tiap panggilan diambil dari catatan LiteLLM (kolom waktu, token, status). Pencocokannya memakai jam mulai. Yang cocok: ${R.jumlah.cocok} dari ${R.jumlah.llm_ok} panggilan sukses.</li>
+    <li>Pertanyaan, kriteria benar, dan pola tahap beban sama dengan <code>scripts/uji-beban.mts</code>. 8 pertanyaan pemanasan tidak ikut dihitung. Batas waktu tiap pertanyaan ${I.batas_ms / 1000} detik.</li>
+  </ul></div>
+  <div class="card"><h3>Yang tidak bisa diukur dengan tepat</h3><ul class="list">
+    <li><b>Lama antre di vLLM untuk tiap permintaan saat ramai</b> — vLLM hanya menyimpan angka gabungan (histogram kumulatif). Yang tersedia hanya rata-rata per tahap.</li>
+    <li><b>Jaringan dan LiteLLM secara terpisah</b> — hanya terlihat gabungannya, "jaringan + gateway". Angkanya = lama panggilan di laptop dikurangi lama di LiteLLM.</li>
+    <li><b>TTFT di dalam vLLM untuk tiap panggilan</b> — yang tersedia hanya TTFT klien, TTFT LiteLLM, dan rata-rata TTFT vLLM per tahap.</li>
+    <li><b>Waktu di dalam kerangka agent (VoltAgent)</b> — hanya terlihat sebagai sisa waktu, yaitu bagian "Kerangka agent &amp; jeda" dan "Orkestrasi".</li>
+    <li><b>Pembagian token berpikir dan token jawaban</b> — hanya perkiraan dari porsi potongan aliran jawaban (stream). Tidak dihitung dengan tokenizer.</li>
+    <li><b>Query lewat <code>pool.connect()</code> (transaksi) dan pool MySQL</b> — tidak dicatat waktunya.</li>
+  </ul></div>
+  <div class="card"><h3>Data yang tidak dicatat</h3><p class="ket">Tidak dicatat: isi pertanyaan dan jawaban, argumen alat, teks SQL, hasil query, isi dokumen, data karyawan, kunci, dan header. Yang dicatat hanya kode pertanyaan, nama agent dan alat, waktu, jumlah token atau potongan, dan status.</p>
+    <p class="src">Data: ${esc(DATA.folder)}/ (span.jsonl, kejadian.jsonl, litellm.csv, pertanyaan.csv, span.csv, panggilan.csv, ringkasan.json, cek.json). Skrip: scripts/profil-alur-agent.mts, scripts/olah-alur-agent.py. Laporan: docs/benchmark-agent-workflow-latency.md.</p></div>`;
+  tabel($("#m-c"), { judul: "Pemeriksaan data", berkas: "sanity-check", cari: false, kol: [{ key: "cek", label: "Pemeriksaan", wrap: true }, { key: "lolos", label: "Hasil", html: v => v ? `<span class="cek-ok">lolos</span>` : `<span class="cek-no">tidak lolos</span>` }, { key: "detail", label: "Detail", wrap: true }], rows: R.cek });
+}
+
+/* =================================================================== NAVIGASI */
+const VIEWS = [["ringkas", "Ringkasan", '<path d="M4 13h6V4H4zM14 20h6V11h-6zM4 20h6v-3H4zM14 7h6V4h-6z"/>', vRingkas], ["tahap", "Tahap beban", '<path d="M4 19V5M4 19h16M8 15l4-5 3 3 5-6"/>', vTahap],
+  ["wf", "Urutan langkah", '<path d="M4 6h10M4 12h16M4 18h7"/>', vWf], ["skenario", "Per pertanyaan", '<path d="M5 5h14v14H5zM5 12h14M12 5v14"/>', vSkenario], ["q45", "Q4 & Q5", '<path d="M13 3 4 14h7l-1 7 9-11h-7z"/>', vQ45], ["metode", "Cara uji & cek", '<path d="M4 5h16M4 12h16M4 19h10"/>', vMetode]];
+const SUDAH = {};
+function buka(id, hash = true) {
+  if (!VIEWS.some(v => v[0] === id)) id = "ringkas";
+  VIEWS.forEach(([k]) => { $("#v-" + k).hidden = k !== id; });
+  document.querySelectorAll("[data-view]").forEach(b => { if (b.dataset.view === id) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
+  if (!SUDAH[id]) { VIEWS.find(v => v[0] === id)[3](); SUDAH[id] = true; } else GRAFIK.forEach(gambarUlang);
+  if (hash) history.replaceState(null, "", "#" + id);
+}
+$("#nav").innerHTML = VIEWS.map(([k, t, ic]) => `<button type="button" data-view="${k}"><svg viewBox="0 0 24 24" aria-hidden="true">${ic}</svg>${t}</button>`).join("");
+$("#mtabs").innerHTML = VIEWS.map(([k, t]) => `<button type="button" data-view="${k}">${t}</button>`).join("");
+document.addEventListener("click", e => { const b = e.target.closest("[data-view]"); if (b) { buka(b.dataset.view); scrollTo({ top: 0 }); } });
+$("#ke-dash").addEventListener("click", () => { location.href = "hasil-pengujian.html#agent"; });
+addEventListener("hashchange", () => buka(decodeURIComponent(location.hash.slice(1)), false));
+const temaBtn = $("#tema");
+function pasangTema(t) { document.documentElement.dataset.theme = t; temaBtn.textContent = t === "dark" ? "Tema terang" : "Tema gelap"; temaBtn.setAttribute("aria-pressed", t === "dark"); try { localStorage.setItem("tema-dashboard", t); } catch (e) { } GRAFIK.forEach(gambarUlang); }
+temaBtn.addEventListener("click", () => pasangTema(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
+pasangTema(document.documentElement.dataset.theme === "dark" ? "dark" : "light");
+function renderSemua() { VIEWS.forEach(([k, , , f]) => { if (!SUDAH[k]) { const el = $("#v-" + k), h = el.hidden; el.hidden = false; f(); SUDAH[k] = true; el.hidden = h; } }); }
+$("#cetak").addEventListener("click", () => { renderSemua(); setTimeout(() => print(), 50); });
+addEventListener("beforeprint", () => { renderSemua(); VIEWS.forEach(([k]) => { const el = $("#v-" + k); el.dataset.hid = el.hidden; el.hidden = false; }); GRAFIK.forEach(g => { g.el.innerHTML = g.gambar(1000); }); });
+addEventListener("afterprint", () => { VIEWS.forEach(([k]) => { const el = $("#v-" + k); el.hidden = el.dataset.hid === "true"; }); GRAFIK.forEach(gambarUlang); });
+$("#foot").innerHTML = `Laporan tersimpan, dibuat ${esc(DATA.dibuat)} oleh <code>scripts/olah-alur-agent.py</code> dari ${esc(DATA.folder)}/. Halaman ini tidak terhubung ke server atau layanan apa pun.`;
+buka(decodeURIComponent(location.hash.slice(1)) || "ringkas", false);
+</script>
+</body>
+</html>

@@ -1,6 +1,10 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
+  // Next.js memblokir JavaScript dev dari hostname tunnel secara bawaan.
+  // Tanpa ini halaman publik terlihat, tetapi seluruh tombol client mati.
+  // Hostname tunnel dibaca dari env (dipisah koma), bukan ditulis di sini: repo ini publik.
+  allowedDevOrigins: (process.env.DEV_ORIGINS ?? "").split(",").map((s) => s.trim()).filter(Boolean),
   // Kunci root project. Tanpa ini Turbopack ikut membaca package-lock.json
   // nyasar di C:\Users\ridho dan salah menebak root.
   turbopack: {

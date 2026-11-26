@@ -64,7 +64,10 @@ function pesanKorpusHilang(galat: unknown): string {
 }
 
 /** Potongan yang diambil per pencarian. */
-const BATAS_SOP = 5;
+// Model gateway hanya memiliki konteks 8.192 token. Lima potongan SOP bersama
+// instruksi dan skema tool pernah membuat putaran setelah pencarian ditolak,
+// walaupun dokumen yang benar sudah berada di urutan pertama.
+const BATAS_SOP = 3;
 
 /** Tiket yang diambil per pencarian. */
 const BATAS_TIKET = 5;

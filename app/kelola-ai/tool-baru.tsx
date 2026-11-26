@@ -233,6 +233,7 @@ export function ToolBaru({
                 cakupan: cakupan || dipilih?.cakupanBisa[0],
                 batas: Number(f.get("batas")),
                 urut: f.get("urut") || null,
+                urutArah: f.get("urutArah"),
               },
         ),
       });
@@ -441,6 +442,14 @@ export function ToolBaru({
                     {k}
                   </option>
                 ))}
+              </select>
+            </label>
+
+            <label className="flex flex-col gap-1.5 text-sm">
+              <span className="font-medium">Arah urutan</span>
+              <select name="urutArah" className="rounded-xl border border-garis bg-kertas px-3 py-2 text-sm">
+                <option value="desc">Terbaru atau terbesar dulu</option>
+                <option value="asc">Terlama atau terkecil dulu</option>
               </select>
             </label>
 

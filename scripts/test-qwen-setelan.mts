@@ -44,7 +44,7 @@ function dengan(env: Record<string, string | undefined>, f: () => void) {
   }
 }
 
-const SAH = { QWEN_API_URL: "https://contoh.trycloudflare.com/v1", QWEN_API_KEY: "kunci-uji", QWEN_ENABLED: "true" };
+const SAH = { QWEN_API_URL: "https://contoh-uji.trycloudflare.com/v1", QWEN_API_KEY: "kunci-uji", QWEN_ENABLED: "true" };
 
 // ============================================================
 console.log("=== 1. Setelan yang sah ===");

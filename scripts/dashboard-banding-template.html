@@ -1,0 +1,335 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<!--__LIVE__-->
+<title>Ratu AI 1 vs 4 GPU</title>
+<script>try{var t=localStorage.getItem('tema-dashboard');if(t==='dark'||t==='light')document.documentElement.dataset.theme=t}catch(e){}</script>
+<style>
+/*__CSS__*/
+:root{--envA:#d97706;--envB:#4f46e5;--r0:#0f9d76;--r1:#2563eb;--r2:#d97706;--r3:#db2777;--w-embedding:#db2777;--w-db:#b45309;--w-orkestrasi:#c7d2fe}
+:root[data-theme="dark"]{--envA:#f59e0b;--envB:#8b8ff9;--r0:#34d399;--r1:#60a5fa;--r2:#f59e0b;--r3:#f472b6;--w-embedding:#f472b6;--w-db:#f59e0b;--w-orkestrasi:#3730a3}
+.live{position:sticky;top:0;z-index:30;background:var(--warn-soft);border:1px solid var(--warn);color:var(--ink);border-radius:10px;padding:10px 14px;margin:0 0 14px;font-size:14px}
+.live b{color:var(--warn)}
+.vs{display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:baseline}
+.cek-ok{color:var(--good);font-weight:700}.cek-no{color:var(--bad);font-weight:700}
+.jw{white-space:pre-wrap;max-height:14em;overflow:auto;min-width:320px;max-width:720px;font-size:13px;line-height:1.5}
+@media print{.jw{max-height:none;overflow:visible}}
+</style>
+</head>
+<body>
+<a class="skip" href="#isi">Lewati ke konten</a>
+<div class="app">
+  <aside class="side" aria-label="Navigasi">
+    <div class="brand"><div class="logo" aria-hidden="true">R</div><div><b>Ratu AI</b><small>1 GPU vs 4 GPU</small></div></div>
+    <div><div class="grup">Laporan</div><nav class="nav" id="nav"></nav></div>
+    <div class="bawah"><div class="grup">Lainnya</div><div class="nav">
+      <button type="button" data-href="hasil-pengujian.html"><svg viewBox="0 0 24 24"><path d="M4 13h6V4H4zM14 20h6V11h-6zM4 20h6v-3H4zM14 7h6V4h-6z"/></svg>Dashboard utama</button>
+      <button type="button" data-href="grafik-agent-workflow-latency.html"><svg viewBox="0 0 24 24"><path d="M4 6h10M4 12h16M4 18h7"/></svg>Alur agent 17 Nov</button></div></div>
+  </aside>
+  <main id="isi" tabindex="-1">
+    <div class="mtabs" id="mtabs" role="navigation" aria-label="Navigasi"></div>
+    <header class="top">
+      <div>
+        <h1>Ratu AI — 1 GPU vs 4 GPU</h1>
+        <p class="sub">Model sama (Qwen3-14B-AWQ), pertanyaan sama · g5.2xlarge: 1 GPU (1× A10G) · g5.12xlarge: 4 GPU (4× A10G), satu salinan model per GPU</p>
+        <div class="badges"><span class="badge hist">Hasil uji lama · 17 &amp; 20 Nov 2026</span><span class="badge agent">Diuji lewat agent dan LiteLLM</span><span class="badge">Laporan tetap, bukan data langsung</span></div>
+      </div>
+      <div class="aksi">
+        <button class="btn" type="button" id="cetak"><svg viewBox="0 0 24 24"><path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M8 14h8v7H8z"/></svg>Cetak / PDF</button>
+        <button class="btn" type="button" id="tema" aria-pressed="false">Tema gelap</button>
+      </div>
+    </header>
+    <div class="live" id="live" hidden></div>
+    <section class="view" id="v-a"><div id="a-isi"></div></section>
+    <section class="view" id="v-b" hidden><div id="b-isi"></div><div id="b-gpu"></div></section>
+    <section class="view" id="v-banding" hidden><div id="sub-ringkas"></div><div id="sub-latensi"></div><div id="sub-komposisi"></div><div id="sub-throughput"></div><div id="sub-agent"></div></section>
+    <section class="view" id="v-jawaban" hidden></section>
+    <section class="view" id="v-metode" hidden></section>
+    <p class="foot" id="foot"></p>
+  </main>
+</div>
+<div id="tip" role="tooltip"></div>
+<script>
+"use strict";
+const DATA = /*__DATA__*/null;
+/*__HELPER__*/
+const E = DATA.env, KAT = DATA.kategori, NK = DATA.nama_kategori, TX = DATA.teks || {};
+const B = (env, g) => DATA.baris.find(b => b.env === env && b.grup === g) || null;
+// GS = semua tahap yang punya data (halaman per mesin). G = tahap yang ada di KEDUA mesin (halaman perbandingan),
+// supaya tahap tambahan mesin B (mis. 10–20 pengguna, 23 Nov) tidak dibandingkan dengan data A yang kosong.
+const GS = DATA.grup.filter(g => DATA.baris.some(b => b.grup === g));
+const G = GS.filter(g => B("A", g) && B("B", g));
+const TB = DATA.tambahan_b || [], TBG = new Set(TB.flatMap(t => t.tahap.map(n => "beban-" + n)));
+const SEMENTARA = g => DATA.progres?.live && B("B", g) && !B("B", g).lengkap;
+const LBL = g => (g === "berurutan" ? "Satu per satu (acuan)" : `${g.split("-")[1]} pengguna`) + (SEMENTARA(g) ? " (berjalan)" : "");
+const LBLP = g => g === "berurutan" ? "Acuan" : g.split("-")[1];
+const WENV = { A: "--envA", B: "--envB" };
+const pct = (a, b) => (a == null || b == null || !a) ? null : 100 * (b / a - 1);
+const dl = (a, b, lebihKecilBaik = true, sat = "%") => { const p = pct(a, b); if (p == null) return delta("netral", "tidak ada pembanding");
+  const baik = lebihKecilBaik ? p < 0 : p > 0; return delta(Math.abs(p) < 3 ? "netral" : baik ? "good" : "bad", `${p > 0 ? "▲" : "▼"} ${nf0(Math.abs(p))}${sat} vs 1 GPU`); };
+const intinya = k => TX[k] ? `<p class="interpret"><b>Intinya:</b> ${esc(TX[k])}</p>` : "";
+const legEnv = () => legenda([[E.A.label, WENV.A, "lingkaran"], [E.B.label, WENV.B, "lingkaran"]]);
+const sumX = (b, ks) => ks.reduce((a, k) => a + (b?.["x_" + k] || 0), 0);
+const MODEL_K = ["tunggu", "berpikir", "rencana", "menulis", "ekor"];
+
+/* ======================= SEMENTARA (uji 4 GPU masih berjalan) */
+(function () {
+  const P = DATA.progres; if (!P || !P.live) return;
+  const el = $("#live"); el.hidden = false;
+  el.innerHTML = `<b>Hasil sementara — uji 4 GPU masih berjalan.</b> Data per ${esc(P.jam)} WIB: ${P.selesai} dari ${P.target} pertanyaan selesai${P.sedang ? ` · sedang: ${esc(P.sedang)}` : ""}. `
+    + `Halaman memuat ulang sendiri setiap 60 detik. Tahap bertanda "(berjalan)" belum lengkap.`
+    + (P.ada_token ? "" : " Jumlah token dan kecepatan menulis tampil setelah uji selesai.") + (P.ada_gpu ? "" : " Data GPU tampil setelah uji selesai.");
+  try { const y = sessionStorage.getItem("gulir-banding"); if (y) setTimeout(() => scrollTo(0, +y), 50); } catch (e) { }
+  setTimeout(() => { try { sessionStorage.setItem("gulir-banding", String(scrollY)); } catch (e) { } location.reload(); }, 60000);
+})();
+
+/* ======================= HALAMAN PER INSTANCE */
+const MI = { p50: "P50", p95: "P95", rata: "Rata-rata", max: "Maksimum" };
+function vInstance(env) {
+  const e = E[env], p = env.toLowerCase(), gs = GS.filter(g => B(env, g));
+  const s0 = B(env, "berurutan"), s8 = B(env, "beban-8");
+  const nb = gs.filter(g => g !== "berurutan").map(g => +g.split("-")[1]), rentang = nb.length ? `${Math.min(...nb)}–${Math.max(...nb)}` : "—";
+  const catTB = env === "B" && TB.length ? `<div class="caveat"><b>Tahap ${TB.flatMap(t => t.tahap).join(", ")} pengguna</b> diuji ${TB.map(t => esc(t.tanggal)).join(", ")} di mesin yang sama dengan setelan yang sama (4 salinan, max-num-seqs 4, vLLM 0.33.0rc1.dev1030). Tahap lain diuji ${esc(e.tanggal)}. Data: <code>${TB.map(t => esc(t.folder)).join(", ")}</code>.</div>` : "";
+  const tot = gs.filter(g => g !== "berurutan").reduce((x, g) => { const r = B(env, g); return { n: x.n + r.n, benar: x.benar + r.benar, habis: x.habis + r.habis }; }, { n: 0, benar: 0, habis: 0 });
+  const totS = s0 ? `${s0.benar}/${s0.n}` : "—";
+  $(`#${p}-isi`).innerHTML = `<h2 style="margin-top:0">${esc(e.label)}</h2>
+  <p class="lead">${esc(e.mesin)} · diuji ${esc(e.tanggal)} · model Qwen3-14B-AWQ. Jalur: agent → LiteLLM (pembagi permintaan) → vLLM (mesin model). Data: <code>${esc(e.folder)}</code>.</p>
+  ${catTB}
+  <div class="kpis">
+    ${kpi("Satu per satu: P50 / P95", `${nf(s0?.p50)} / ${nf(s0?.p95)}`, "dtk", `pertanyaan dikirim bergantian, jadi tanpa antrean · n=${s0?.n ?? "—"} · ${totS} sesuai kriteria`)}
+    ${kpi("8 pengguna: P50 / P95", `${nf(s8?.p50)} / ${nf(s8?.p95)}`, "dtk", `n=${s8?.n ?? "—"} · ${s8?.habis ?? "—"} waktu habis`)}
+    ${kpi(`${rentang} pengguna: sesuai kriteria`, `${tot.benar}/${tot.n}`, "", `${tot.habis} waktu habis · tiket tersimpan ${DATA.tiket[env] ?? "—"}`)}
+    ${kpi("8 pengguna: antre di vLLM", nf(s8?.vllm_antre_ms / 1000, 2), "dtk", `per panggilan model · menunggu kata pertama ${nf(s8?.x_tunggu)} dtk per pertanyaan`)}
+    ${kpi("8 pengguna: selesai per menit", nf(s8?.pertanyaan_per_menit, 1), "pertanyaan/menit", `${nf(s8?.tps_gabungan)} token ditulis per detik, semua pengguna`)}
+    ${kpi("8 pengguna: daya GPU", nf0(s8?.watt_total), "W", env === "B" ? "jumlah 4 GPU (batas 4 × 300 W)" : "1 GPU (batas 300 W)")}
+    ${(() => { const nm = Math.max(...nb), sm = nm > 8 ? B(env, "beban-" + nm) : null; return sm ? kpi(`${nm} pengguna: P50 / P95`, `${nf(sm.p50)} / ${nf(sm.p95)}`, "dtk", `n=${sm.n} · ${sm.habis} waktu habis · antre vLLM ${nf(sm.vllm_antre_ms / 1000, 2)} dtk`)
+      + kpi(`${nm} pengguna: selesai per menit`, nf(sm.pertanyaan_per_menit, 1), "pertanyaan/menit", `${nf(sm.tps_gabungan)} token ditulis per detik · daya ${nf0(sm.watt_total)} W`) : ""; })()}
+  </div>
+  <div class="card"><h3>Waktu jawab per tahap</h3><p class="ket">Dari pertanyaan dikirim sampai jawaban selesai. P50 = waktu tengah. P95 = 95 dari 100 pertanyaan selesai lebih cepat dari ini. Arahkan kursor ke titik untuk melihat jumlah pertanyaan (n).</p><div class="ctl"><span id="${p}-m"></span></div><div class="chart" id="${p}-c"></div></div>
+  <div class="card"><h3>Ke mana waktunya habis</h3><p class="ket">Rata-rata detik per pertanyaan, dipecah per bagian. Tiap detik dihitung sekali saja.</p><div class="leg">${KAT.map(k => `<span><i style="background:var(--w-${k})"></i>${esc(NK[k])}</span>`).join("")}</div><div class="chart" id="${p}-k"></div></div>
+  <div class="card"><h3>Selesai per menit dan antrean</h3><div id="${p}-t"></div></div>
+  <div class="card"><h3>Per skenario (Q1–Q8)</h3><div class="ctl"><span class="lbl">Tahap</span><span id="${p}-sg"></span></div><div id="${p}-s"></div></div>
+  <div class="card"><h3>Q4 SOP dan Q5 rancangan tiket</h3><div id="${p}-q"></div></div>`;
+  let m = "p50";
+  const g1 = pasang($(`#${p}-c`), w => garis(w, { xs: gs.map(LBL), xsPendek: gs.map(LBLP), xJudul: "tahap", yJudul: "detik", aria: `Waktu jawab ${e.label}`, kanan: 70,
+    series: [[m, false], ...(m === "p50" ? [["p95", true]] : [])].map(([k, put]) => ({ nama: MI[k], warna: WENV[env], putus: put, nilai: gs.map(g => B(env, g)[k]),
+      tips: gs.map(g => { const r = B(env, g); return `${e.label}\n${LBL(g)} · ${MI[k]}: ${nf(r[k])} dtk\nn = ${r.n} · ${r.benar} sesuai kriteria · ${r.habis} waktu habis`; }) })) }));
+  segmen($(`#${p}-m`), [["p50", "P50 & P95"], ["rata", "Rata-rata"], ["max", "Maksimum"]], m, k => { m = k; gambarUlang(g1); }, "Pilih statistik");
+  pasang($(`#${p}-k`), w => tumpuk(w, { kunci: KAT, nama: NK, satuan: "dtk", xJudul: "detik (rata-rata per pertanyaan)", aria: "Komposisi",
+    rows: gs.map(g => ({ label: LBL(g), bag: Object.fromEntries(KAT.map(k => [k, B(env, g)["x_" + k]])) })) }));
+  tabel($(`#${p}-t`), { judul: `Throughput ${e.label}`, berkas: `throughput-${p}`, cari: false,
+    kol: [{ key: "g", label: "Tahap" }, { key: "n", label: "n", num: true }, { key: "p50", label: "P50 (dtk)", num: true, f: v => nf(v) }, { key: "p95", label: "P95 (dtk)", num: true, f: v => nf(v) },
+      { key: "pertanyaan_per_menit", label: "Pertanyaan/menit", num: true, f: v => nf(v, 2) }, { key: "tps_gabungan", label: "Token/dtk (semua pengguna)", num: true, f: v => nf(v) }, { key: "tps_panggilan", label: "Token/dtk per panggilan", num: true, f: v => nf(v) },
+      { key: "lt_ttft", label: "Sampai kata pertama (ms)", num: true, f: nf0 }, { key: "vllm_antre_ms", label: "Antre vLLM (ms)", num: true, f: nf0 }, { key: "vllm_decode_ms", label: "Menulis (ms)", num: true, f: nf0 },
+      { key: "kv_maks", label: "Memori KV maks (%)", num: true, f: v => nf(v) }, { key: "llm", label: "Panggilan model/pertanyaan", num: true, f: v => nf(v, 2) }, { key: "watt_total", label: "Daya GPU (W)", num: true, f: nf0 }],
+    rows: gs.map(g => Object.assign({ g: LBL(g) }, B(env, g))) });
+  let sg = "berurutan";
+  const isiS = () => tabel($(`#${p}-s`), { judul: `Per skenario ${e.label}`, berkas: `skenario-${p}-${sg}`, cari: false,
+    kol: [{ key: "q", label: "Pertanyaan" }, { key: "n", label: "n", num: true }, { key: "benar", label: "Benar", num: true }, { key: "habis", label: "Habis", num: true }, { key: "p50", label: "P50", num: true, f: v => nf(v) }, { key: "p95", label: "P95", num: true, f: v => nf(v) }, { key: "max", label: "Maks", num: true, f: v => nf(v) }, { key: "llm", label: "Panggilan model", num: true, f: v => nf(v) }, { key: "keluar", label: "Token keluar", num: true, f: nf0 }],
+    rows: Object.entries(DATA.per_kode[env][sg] || {}).filter(([, v]) => v).map(([k, v]) => Object.assign({ q: `${k} ${DATA.jenis[k] || ""}` }, v)) });
+  segmen($(`#${p}-sg`), gs.map(g => [g, LBLP(g)]), sg, k => { sg = k; isiS(); }, "Pilih tahap");
+  isiS();
+  tabel($(`#${p}-q`), { judul: `Q4/Q5 ${e.label}`, berkas: `q4q5-${p}`, kol: [{ key: "g", label: "Tahap" }, { key: "kode", label: "Q" }, { key: "total", label: "Detik", num: true, f: v => nf(v) }, { key: "status", label: "Status" }, { key: "benar", label: "Benar", html: v => v ? `<span class="ok">ya</span>` : `<span class="no">tidak</span>` }, { key: "alat", label: "Alat", f: v => v ? v.split("|").join(" → ") : "—" }, { key: "n_llm", label: "Panggilan model", num: true }, { key: "delegasi", label: "Delegasi", num: true }],
+    rows: gs.flatMap(g => (DATA.q45[env][g] || []).map(x => Object.assign({ g: LBL(g) }, x))) });
+}
+
+/* ======================= RINGKASAN */
+function vRingkas() {
+  const a8 = B("A", "beban-8"), b8 = B("B", "beban-8"), aS = B("A", "berurutan"), bS = B("B", "berurutan");
+  const tot = env => G.reduce((x, g) => { const r = B(env, g); return r ? { n: x.n + r.n, benar: x.benar + r.benar, habis: x.habis + r.habis } : x; }, { n: 0, benar: 0, habis: 0 });
+  const tA = tot("A"), tB = tot("B");
+  $("#sub-ringkas").innerHTML = `<h2 style="margin-top:0">Perbandingan 1 GPU vs 4 GPU</h2>
+  <div class="card hero"><p>${esc(TX.ringkasan || "")}</p><p class="batas">Empat replika menambah berapa banyak permintaan yang bisa dikerjakan bersamaan. Satu jawaban tidak jadi 4× lebih cepat. Kedua uji memakai skrip, 8 pertanyaan, kriteria benar, dan pola tahap yang sama. Perbedaan versi vLLM/LiteLLM dan jaringan dicatat di Metodologi.</p></div>
+  ${(DATA.stop.B || []).length ? `<div class="caveat"><b>Uji 4 GPU dihentikan:</b> ${esc(DATA.stop.B.map(x => x.alasan).join("; "))}</div>` : ""}
+  <div class="kpis">
+    ${kpi("8 pengguna: waktu tengah (P50)", `${nf(a8?.p50)} → ${nf(b8?.p50)}`, "dtk", `${E.A.pendek} → ${E.B.pendek} · n=${a8?.n ?? "—"}/${b8?.n ?? "—"}`, dl(a8?.p50, b8?.p50))}
+    ${kpi("8 pengguna: P95 waktu jawab", `${nf(a8?.p95)} → ${nf(b8?.p95)}`, "dtk", "95 dari 100 pertanyaan lebih cepat dari ini. Hanya 24 pertanyaan, jadi 1–2 yang lambat bisa menggeser angkanya", dl(a8?.p95, b8?.p95))}
+    ${kpi("8 pengguna: antre di vLLM", `${nf(a8?.vllm_antre_ms / 1000, 2)} → ${nf(b8?.vllm_antre_ms / 1000, 2)}`, "dtk", "rata-rata waktu menunggu giliran per panggilan model (4 replika digabung)", dl(a8?.vllm_antre_ms, b8?.vllm_antre_ms))}
+    ${kpi("8 pengguna: token ditulis per detik", `${nf(a8?.tps_gabungan)} → ${nf(b8?.tps_gabungan)}`, "tok/dtk", "semua token jawaban ÷ lama tahap", dl(a8?.tps_gabungan, b8?.tps_gabungan, false))}
+    ${kpi("Satu per satu: waktu tengah (P50)", `${nf(aS?.p50)} → ${nf(bS?.p50)}`, "dtk", "1 pertanyaan pada satu waktu — tanpa antrean", dl(aS?.p50, bS?.p50))}
+    ${kpi("Sesuai kriteria (dari 97 pertanyaan)", `${tA.benar}/${tA.n} → ${tB.benar}/${tB.n}`, "", `waktu habis: ${tA.habis} → ${tB.habis} · tiket tersimpan: ${DATA.tiket.A ?? "—"} / ${DATA.tiket.B ?? "dicek di akhir uji"}`)}
+  </div>
+  <div class="card"><h3>Waktu jawab per tahap</h3><p class="ket">Garis tegas: waktu tengah (P50). Garis putus: P95. Arahkan kursor ke titik untuk melihat jumlah pertanyaan (n).</p>${legEnv()}<div class="chart" id="rk-c"></div>${intinya("latensi")}</div>
+  <div class="card"><h3>Tabel 1 GPU vs 4 GPU per tahap</h3><div id="rk-t"></div></div>`;
+  pasang($("#rk-c"), w => garis(w, { xs: G.map(LBL), xsPendek: G.map(LBLP), xJudul: "tahap", yJudul: "detik", aria: "P50 dan P95 per tahap", kanan: 92,
+    series: [["A", "p50", false], ["A", "p95", true], ["B", "p50", false], ["B", "p95", true]].map(([env, k, put]) => ({ nama: `${E[env].pendek} ${k.toUpperCase()}`, warna: WENV[env], putus: put,
+      nilai: G.map(g => B(env, g)?.[k] ?? null), tips: G.map(g => { const r = B(env, g); return r ? `${E[env].label}\n${LBL(g)} · ${k.toUpperCase()}: ${nf(r[k])} dtk\nn = ${r.n} · ${r.benar} sesuai kriteria · ${r.habis} waktu habis` : ""; }) })) }));
+  tabel($("#rk-t"), { judul: "Perbandingan per tahap", berkas: "perbandingan-1gpu-4gpu", cari: false,
+    kol: [{ key: "g", label: "Tahap" }, { key: "na", label: "n", num: true }, { key: "pa", label: "P50 1 GPU", num: true, f: v => nf(v) }, { key: "pb", label: "P50 4 GPU", num: true, f: v => nf(v) }, { key: "dp", label: "Selisih P50", num: true, f: v => v == null ? "—" : (v > 0 ? "+" : "") + nf0(v) + "%" },
+      { key: "qa", label: "P95 1 GPU", num: true, f: v => nf(v) }, { key: "qb", label: "P95 4 GPU", num: true, f: v => nf(v) }, { key: "dq", label: "Selisih P95", num: true, f: v => v == null ? "—" : (v > 0 ? "+" : "") + nf0(v) + "%" },
+      { key: "ba", label: "Benar 1 GPU", num: true }, { key: "bb", label: "Benar 4 GPU", num: true }, { key: "ha", label: "Waktu habis 1/4", num: true }],
+    rows: G.map(g => { const a = B("A", g) || {}, b = B("B", g) || {}; return { g: LBL(g), na: `${a.n ?? "—"}/${b.n ?? "—"}`, pa: a.p50, pb: b.p50, dp: pct(a.p50, b.p50), qa: a.p95, qb: b.p95, dq: pct(a.p95, b.p95), ba: a.benar, bb: b.benar, ha: `${a.habis ?? "—"}/${b.habis ?? "—"}` }; }) });
+}
+
+/* ======================= LATENSI */
+const ML = { p50: "P50", p95: "P95", p99: "P99*", rata: "Rata-rata", min: "Minimum", max: "Maksimum" };
+function vLatensi() {
+  $("#sub-latensi").innerHTML = `<h2>Waktu jawab dari awal sampai akhir</h2><p class="lead">Diukur dari pertanyaan dikirim sampai jawaban selesai (agent → LiteLLM → vLLM). *P99 di sini praktis sama dengan nilai maksimum, karena tiap tahap hanya berisi 3–40 pertanyaan.</p>
+  <div class="card"><div class="ctl"><span id="lt-m"></span></div>${legEnv()}<div class="chart" id="lt-c"></div></div>
+  <div class="card"><h3>Semua angka waktu jawab</h3><div id="lt-t"></div></div>`;
+  let m = "p50";
+  const g = pasang($("#lt-c"), w => batang(w, { xs: G.map(LBLP), xJudul: "tahap (pengguna bersamaan)", yJudul: "detik", desimal: 1, aria: ML[m],
+    series: ["A", "B"].map(env => ({ nama: E[env].pendek, warna: WENV[env], nilai: G.map(g => B(env, g)?.[m] ?? null), tips: G.map(g => { const r = B(env, g); return r ? `${E[env].label}\n${LBL(g)} · ${ML[m]}: ${nf(r[m])} dtk\nn = ${r.n}` : ""; }) })) }));
+  segmen($("#lt-m"), Object.entries(ML), m, k => { m = k; gambarUlang(g); }, "Pilih statistik");
+  tabel($("#lt-t"), { judul: "Statistik latensi", berkas: "latensi", kol: [{ key: "g", label: "Tahap" }, { key: "e", label: "Lingkungan" }, { key: "n", label: "n", num: true }].concat(Object.entries(ML).map(([k, l]) => ({ key: k, label: l + " (dtk)", num: true, f: v => nf(v) }))),
+    rows: G.flatMap(g => ["A", "B"].map(env => { const r = B(env, g); return r && Object.assign({ g: LBL(g), e: E[env].pendek }, r); }).filter(Boolean)) });
+}
+
+/* ======================= KOMPOSISI */
+function vKomposisi() {
+  $("#sub-komposisi").innerHTML = `<h2>Ke mana waktunya habis</h2><p class="lead">Rata-rata detik per pertanyaan, dipecah per bagian. Tiap detik dihitung sekali saja, di bagian yang paling tepat. Baris berpasangan: 1 GPU lalu 4 GPU.</p>
+  <div class="card">${`<div class="leg">${KAT.map(k => `<span><i style="background:var(--w-${k})"></i>${esc(NK[k])}</span>`).join("")}</div>`}<div class="chart" id="km-c"></div>${intinya("komposisi")}</div>
+  <div class="card"><h3>Menunggu giliran vs model bekerja</h3><div id="km-t"></div></div>`;
+  pasang($("#km-c"), w => tumpuk(w, { kunci: KAT, nama: NK, satuan: "dtk", xJudul: "detik (rata-rata per pertanyaan)", aria: "Komposisi",
+    rows: G.flatMap(g => ["A", "B"].map(env => { const r = B(env, g); return r && { label: `${LBLP(g)} · ${E[env].pendek}`, bag: Object.fromEntries(KAT.map(k => [k, r["x_" + k]])) }; }).filter(Boolean)) }));
+  tabel($("#km-t"), { judul: "Menunggu vs kerja", berkas: "komposisi", cari: false, kol: [{ key: "g", label: "Tahap" }, { key: "e", label: "Lingkungan" }, { key: "tu", label: "Menunggu kata pertama", num: true, f: v => nf(v) }, { key: "be", label: "Berpikir", num: true, f: v => nf(v) }, { key: "me", label: "Menulis + rencana + ekor", num: true, f: v => nf(v) }, { key: "al", label: "Alat + database + pencarian SOP", num: true, f: v => nf(v, 2) }, { key: "to", label: "Total (rata-rata)", num: true, f: v => nf(v) }],
+    rows: G.flatMap(g => ["A", "B"].map(env => { const r = B(env, g); return r && { g: LBL(g), e: E[env].pendek, tu: r.x_tunggu, be: r.x_berpikir, me: (r.x_menulis || 0) + (r.x_rencana || 0) + (r.x_ekor || 0), al: sumX(r, ["embedding", "db", "alat"]), to: r.rata }; }).filter(Boolean)) });
+}
+
+/* ======================= THROUGHPUT */
+const MT = {
+  tps_gabungan: ["Token ditulis per detik (gabungan)", "token/detik", 1, false, "Semua token jawaban di tahap itu, termasuk saat berpikir, dibagi lama tahap."],
+  pertanyaan_per_menit: ["Pertanyaan selesai per menit", "pertanyaan/menit", 2, false, "Jumlah pertanyaan dibagi lama tahap. Sudah termasuk jeda 5 detik antar pertanyaan dari pengguna yang sama."],
+  tps_panggilan: ["Kecepatan menulis per panggilan (P50)", "token/detik", 1, false, "Token yang ditulis dibagi waktu menulis satu panggilan model (lama di LiteLLM dikurangi TTFT). Tidak sama dengan uji kecepatan model langsung."],
+  lt_ttft: ["TTFT per panggilan (LiteLLM, P50)", "milidetik", 0, true, "TTFT — waktu sampai kata pertama muncul. Dihitung sejak panggilan masuk LiteLLM, jadi waktu antre di vLLM ikut terhitung."],
+  vllm_antre_ms: ["Antre vLLM per panggilan", "milidetik", 0, true, "Rata-rata waktu satu permintaan menunggu giliran di antrean vLLM (queue)."],
+  vllm_decode_ms: ["Waktu menulis vLLM per panggilan", "milidetik", 0, true, "Rata-rata waktu vLLM menulis jawaban untuk satu permintaan (decode)."],
+  kv_maks: ["KV cache maks (per replika)", "%", 1, true, "KV cache — memori GPU untuk permintaan yang sedang dikerjakan. Untuk 4 GPU, yang ditampilkan replika paling tinggi."],
+  watt_total: ["Daya GPU total", "watt", 0, true, "Rata-rata daya listrik. Untuk 4 GPU, daya keempat GPU dijumlahkan."],
+};
+function vThroughput() {
+  $("#sub-throughput").innerHTML = `<h2>Kecepatan, jumlah selesai, dan antrean</h2><p class="lead">Throughput — berapa yang selesai per menit. Token per detik di sini diukur lewat agent: pertanyaannya panjang (2.800–7.700 token) dan model ikut berpikir. Jangan disamakan dengan uji model langsung (±52 token/detik per permintaan, dengan pertanyaan buatan).</p>
+  <div class="card"><div class="ctl"><span id="tp-m"></span></div>${legEnv()}<div class="chart" id="tp-c"></div><p class="ket" id="tp-k"></p>${intinya("throughput")}</div>
+  <div class="card"><h3>Tabel lengkap</h3><div id="tp-t"></div></div>`;
+  let m = "tps_gabungan";
+  const g = pasang($("#tp-c"), w => { const [n, y, d] = MT[m]; return batang(w, { xs: G.map(LBLP), xJudul: "tahap (pengguna bersamaan)", yJudul: y, desimal: d, aria: n,
+    series: ["A", "B"].map(env => ({ nama: E[env].pendek, warna: WENV[env], nilai: G.map(g => B(env, g)?.[m] ?? null), tips: G.map(g => { const r = B(env, g); return r ? `${E[env].label}\n${LBL(g)} · ${n}: ${r[m] == null ? "tidak tersedia" : nf(r[m], d)} ${y}` : ""; }) })) }); });
+  const tulis = () => { $("#tp-k").textContent = MT[m][4]; gambarUlang(g); };
+  segmen($("#tp-m"), Object.entries(MT).map(([k, v]) => [k, v[0].replace(" (gabungan)", "").replace(" (LiteLLM, P50)", "").replace(" (P50)", "")]), m, k => { m = k; tulis(); }, "Pilih metrik");
+  tulis();
+  tabel($("#tp-t"), { judul: "Throughput", berkas: "throughput", kol: [{ key: "g", label: "Tahap" }, { key: "e", label: "Lingkungan" }].concat(Object.entries(MT).map(([k, v]) => ({ key: k, label: v[0], num: true, f: x => nf(x, v[2]) }))).concat([{ key: "durasi_s", label: "Lama tahap (dtk)", num: true, f: v => nf(v, 0) }]),
+    rows: G.flatMap(g => ["A", "B"].map(env => { const r = B(env, g); return r && Object.assign({ g: LBL(g), e: E[env].pendek }, r); }).filter(Boolean)) });
+}
+
+/* ======================= DISTRIBUSI GPU */
+function vGpu() {
+  const gg = GS.filter(g => DATA.replika[g]);
+  const rep = [...new Set(gg.flatMap(g => Object.keys(DATA.replika[g])))].sort();
+  const WR = ["--r0", "--r1", "--r2", "--r3", "--target"];
+  const port = { "qwen14-vllm": "8000", "qwen14-gpu1": "8001", "qwen14-gpu2": "8002", "qwen14-gpu3": "8003" };
+  $("#b-gpu").innerHTML = `<h2>Pembagian kerja ke 4 GPU</h2><p class="lead">Hanya untuk server 4 GPU. Tiap GPU menjalankan satu replika (salinan model). LiteLLM memilih replika secara acak (simple-shuffle). Replika mana yang mengerjakan tiap panggilan dicatat dari tiga sumber terpisah: header <code>x-litellm-model-api-base</code> di tiap panggilan, kolom replika di catatan LiteLLM, dan selisih penghitung (counter) vLLM tiap port.</p>
+  <div class="card"><h3>Panggilan model per replika</h3>${legenda(rep.map((r, i) => [r, WR[i] || "--target", "kotak"]))}<div class="chart" id="gp-c"></div>${intinya("distribusi")}</div>
+  <div class="card"><h3>Tiga sumber dibandingkan</h3><div id="gp-t"></div></div>
+  <div class="card"><h3>Keadaan tiap GPU</h3><p class="ket">Direkam nvidia-smi tiap 0,5 detik. Jam server disamakan dengan jam laptop (dikoreksi ${nf0((DATA.koreksi_jam.B || 0) / 1000)} detik).</p><div id="gp-g"></div></div>
+  <div class="card"><h3>Catatan vLLM per replika</h3><p class="ket">Penuh = semua 4 slot replika terpakai, jadi permintaan berikutnya harus antre.</p><div id="gp-l"></div></div>`;
+  pasang($("#gp-c"), w => batang(w, { xs: gg.map(LBLP), xJudul: "tahap", yJudul: "panggilan model", aria: "Panggilan per replika",
+    series: rep.map((r, i) => ({ nama: r, warna: WR[i] || "--target", nilai: gg.map(g => DATA.replika[g][r]?.panggilan ?? 0), tips: gg.map(g => `${r} · ${LBL(g)}\n${DATA.replika[g][r]?.panggilan ?? 0} panggilan · ${nf0(DATA.replika[g][r]?.token_keluar)} token keluar`) })) }));
+  tabel($("#gp-t"), { judul: "Tiga sumber", berkas: "distribusi-replika", kol: [{ key: "g", label: "Tahap" }, { key: "r", label: "Replika" }, { key: "p", label: "Panggilan (header)", num: true }, { key: "lt", label: "Cocok di catatan LiteLLM", num: true }, { key: "v", label: "Permintaan sukses (counter vLLM)", num: true, f: nf0 }, { key: "tk", label: "Token keluar (LiteLLM)", num: true, f: nf0 }, { key: "tv", label: "Token keluar (vLLM)", num: true, f: nf0 }, { key: "an", label: "Antre vLLM (ms)", num: true, f: nf0 }],
+    rows: gg.flatMap(g => rep.map(r => { const x = DATA.replika[g][r] || {}, k = g === "berurutan" ? "berurutan" : g.split("-")[1], v = (DATA.vllm_replika[k] || {})[port[r]] || {};
+      return { g: LBL(g), r, p: x.panggilan, lt: x.lt, v: v.permintaan, tk: x.token_keluar, tv: v.token_keluar, an: v.antre_ms }; })) });
+  const gi = Object.entries(DATA.gpu_indeks).filter(([k]) => GS.includes(k === "berurutan" ? k : "beban-" + k));
+  tabel($("#gp-g"), { judul: "Keadaan tiap GPU", berkas: "gpu-indeks", kol: [{ key: "g", label: "Tahap" }, { key: "i", label: "GPU" }, { key: "util", label: "Sibuk (%)", num: true, f: nf0 }, { key: "watt", label: "Daya rata (W)", num: true, f: nf0 }, { key: "watt_maks", label: "Daya puncak (W)", num: true, f: nf0 }, { key: "suhu_maks", label: "Suhu maks (°C)", num: true, f: nf0 }, { key: "vram", label: "VRAM (MiB)", num: true, f: nf0 }],
+    rows: gi.flatMap(([k, v]) => Object.entries(v).map(([i, x]) => Object.assign({ g: LBL(k === "berurutan" ? k : "beban-" + k), i: "GPU " + i }, x))) });
+  const lr = Object.entries(DATA.vllm_log_replika || {}).filter(([k]) => GS.includes(k === "berurutan" ? k : "beban-" + k));
+  if (lr.length) tabel($("#gp-l"), { judul: "Catatan vLLM per replika", berkas: "vllm-log-replika", kol: [{ key: "g", label: "Tahap" }, { key: "r", label: "Replika" }, { key: "kv_maks", label: "Memori KV maks (%)", num: true, f: v => nf(v) }, { key: "jalan_maks", label: "Dikerjakan maks", num: true }, { key: "antre_maks", label: "Menunggu maks", num: true }, { key: "penuh", label: "Penuh (% waktu)", num: true, f: nf0 }],
+    rows: lr.flatMap(([k, v]) => Object.entries(v).map(([r, x]) => Object.assign({ g: LBL(k === "berurutan" ? k : "beban-" + k), r }, x))) });
+  else $("#gp-l").innerHTML = `<p class="na">Catatan vLLM per replika belum dimuat.</p>`;
+}
+
+/* ======================= AGENT */
+function vAgent() {
+  $("#sub-agent").innerHTML = `<h2>Ketepatan jawaban dan pemakaian alat</h2>
+  <div class="card"><h3>Hasil per tahap</h3><div id="ag-t"></div>${intinya("agent")}</div>
+  <div class="card"><h3>Q4 SOP dan Q5 rancangan tiket</h3><div id="ag-q"></div>${intinya("q45")}</div>`;
+  tabel($("#ag-t"), { judul: "Agent per tahap", berkas: "agent", kol: [{ key: "g", label: "Tahap" }, { key: "e", label: "Lingkungan" }, { key: "n", label: "n", num: true }, { key: "ok", label: "Terjawab", num: true }, { key: "benar", label: "Sesuai kriteria", num: true }, { key: "habis", label: "Waktu habis", num: true }, { key: "galat", label: "Galat", num: true },
+    { key: "al", label: "Alat sukses", f: (v, r) => `${r.alat_ok ?? "—"}/${r.alat_n ?? "—"}` }, { key: "llm", label: "Panggilan model / pertanyaan", num: true, f: v => nf(v) }, { key: "llm_galat", label: "Panggilan gagal", num: true }, { key: "pikir", label: "Token berpikir / pertanyaan", num: true, f: (v, r) => `${nf0(v)}${r.pikir_pasti ? "" : " (≈)"}` }],
+    rows: G.flatMap(g => ["A", "B"].map(env => { const r = B(env, g); return r && Object.assign({ g: LBL(g), e: E[env].pendek, al: 0 }, r); }).filter(Boolean)) });
+  const rows = ["A", "B"].flatMap(env => G.flatMap(g => (DATA.q45[env][g] || []).map(x => Object.assign({ e: E[env].pendek, g: LBL(g) }, x))));
+  tabel($("#ag-q"), { judul: "Q4/Q5", berkas: "q4q5", kol: [{ key: "e", label: "Lingkungan" }, { key: "g", label: "Tahap" }, { key: "kode", label: "Q" }, { key: "total", label: "Detik", num: true, f: v => nf(v) }, { key: "status", label: "Status" }, { key: "benar", label: "Benar", html: v => v ? `<span class="ok">ya</span>` : `<span class="no">tidak</span>` }, { key: "alat", label: "Alat", f: v => v ? v.split("|").join(" → ") : "—" }, { key: "n_llm", label: "Panggilan model", num: true }, { key: "delegasi", label: "Delegasi", num: true }], rows });
+}
+
+/* ======================= JAWABAN MODEL (4 GPU) */
+function vJawaban() {
+  const J = DATA.jawaban || [], el = $("#v-jawaban");
+  if (!J.length) { el.innerHTML = `<h2 style="margin-top:0">Jawaban model</h2><p class="na">Isi jawaban tidak dicatat di uji ini. Jalankan uji dengan opsi <code>--simpan-jawaban</code>.</p>`; return; }
+  const gagal = J.filter(x => !x.benar).length, gs = GS.filter(g => J.some(x => x.grup === g));
+  el.innerHTML = `<h2 style="margin-top:0">Jawaban model · ${esc(E.B.label)}</h2>
+  <p class="lead">Isi lengkap ${J.length} jawaban Ratu AI dari uji ${esc(E.B.tanggal)}, persis seperti yang diterima pengguna. Pemanasan tidak ikut. Uji 1 GPU (${esc(E.A.tanggal)}) tidak mencatat isi jawaban, jadi tidak ada pembandingnya.</p>
+  <div class="caveat"><b>Hanya untuk internal.</b> Jawaban berisi data perusahaan: angka penjualan, stok, daftar karyawan, dan isi SOP. Jangan kirim halaman ini ke luar perusahaan.</div>
+  <div class="kpis">
+    ${kpi("Jawaban dicatat", J.length, "", `${J.filter(x => x.grup === "berurutan").length} satu per satu + ${J.filter(x => x.grup !== "berurutan").length} di tahap 1–8 pengguna`)}
+    ${kpi("Sesuai kriteria", `${J.length - gagal}/${J.length}`, "", "kriteria otomatis yang sama dengan halaman lain")}
+    ${kpi("Tidak sesuai kriteria", gagal, "", "ditandai “tidak” di kolom Sesuai kriteria; pilih “Tidak sesuai” untuk melihatnya saja")}
+  </div>
+  <div class="card"><h3>Kriteria tiap pertanyaan</h3><div class="tw" style="max-height:none"><table><thead><tr><th>Q</th><th>Pertanyaan</th><th>Dianggap sesuai kalau</th></tr></thead><tbody>
+    ${[["Q1", "memakai alat total_penjualan dan angka totalnya tertulis di jawaban"], ["Q2", "memakai alat pergerakan_penjualan"], ["Q3", "memakai alat stok_kosong"], ["Q4", "memakai alat cari_sop"],
+       ["Q5", "menyiapkan rancangan tiket, atau jawabannya menyebut kategori/sub-kategori tiket"], ["Q6", "memakai alat data karyawan"], ["Q7", "menjawab tanpa menyebut angka rupiah (gaji harus ditolak)"], ["Q8", "menjawab tanpa memakai alat apa pun"]]
+      .map(([k, t]) => `<tr><td>${k}</td><td class="wrap">${esc((J.find(x => x.kode === k) || {}).pertanyaan || DATA.jenis[k] || "")}</td><td class="wrap">${esc(t)}</td></tr>`).join("")}</tbody></table></div>
+    <p class="ket" style="margin-top:8px">Kriteria ini diperiksa otomatis oleh skrip. “Tidak sesuai” belum tentu berarti jawabannya salah bagi pengguna; contohnya sapaan (Q8) yang memakai alat tapi jawabannya tetap wajar.</p></div>
+  <div class="card"><h3>Semua jawaban</h3>
+    <div class="ctl"><span class="lbl">Tampilkan</span><span id="jw-f"></span><span class="lbl">Pertanyaan</span><span id="jw-q"></span><span class="lbl">Tahap</span><span id="jw-g"></span></div>
+    <div id="jw-t"></div></div>`;
+  let f = "semua", fq = "semua", fg = "semua";
+  const isi = () => tabel($("#jw-t"), { judul: "Jawaban model 4 GPU", berkas: "jawaban-model-4gpu",
+    kol: [{ key: "no", label: "#", num: true }, { key: "tahap", label: "Tahap" }, { key: "kode", label: "Q" },
+      { key: "benar", label: "Sesuai kriteria", html: v => v ? `<span class="ok">ya</span>` : `<span class="no">tidak</span>`, f: v => v ? "ya" : "tidak" },
+      { key: "status", label: "Status" }, { key: "alat", label: "Alat", f: v => v && v.length ? v.join(" → ") : "—" }, { key: "detik", label: "Detik", num: true, f: v => nf(v) },
+      { key: "jawaban", label: "Jawaban", wrap: true, html: v => v ? `<div class="jw">${esc(v)}</div>` : `<span class="na">(kosong)</span>` }],
+    rows: J.map((x, i) => Object.assign({ no: i + 1, tahap: LBL(x.grup) }, x)).filter(x => (f === "semua" || !x.benar) && (fq === "semua" || x.kode === fq) && (fg === "semua" || x.grup === fg)) });
+  segmen($("#jw-f"), [["semua", "Semua"], ["gagal", `Tidak sesuai (${gagal})`]], f, k => { f = k; isi(); }, "Saring hasil");
+  segmen($("#jw-q"), [["semua", "Semua"], ...[...new Set(J.map(x => x.kode))].sort().map(k => [k, k])], fq, k => { fq = k; isi(); }, "Saring pertanyaan");
+  segmen($("#jw-g"), [["semua", "Semua"], ...gs.map(g => [g, LBLP(g)])], fg, k => { fg = k; isi(); }, "Saring tahap");
+  isi();
+}
+
+/* ======================= METODOLOGI */
+function vMetode() {
+  const cek = ["A", "B"].flatMap(env => (DATA.cek[env] || []).map(c => Object.assign({ e: E[env].pendek }, c)));
+  $("#v-metode").innerHTML = `<h2 style="margin-top:0">Cara uji dan perbedaan kedua server</h2>
+  <div class="card"><h3>Dua server yang diuji</h3><div class="tw" style="max-height:none"><table><thead><tr><th>Hal</th><th>${esc(E.A.label)}</th><th>${esc(E.B.label)}</th></tr></thead><tbody>
+    <tr><td>Mesin</td><td class="wrap">${esc(E.A.mesin)}</td><td class="wrap">${esc(E.B.mesin)}</td></tr>
+    <tr><td>Tanggal uji</td><td>${esc(E.A.tanggal)}</td><td>${esc(E.B.tanggal)}</td></tr>
+    <tr><td>Setelan vLLM per replika</td><td colspan="2">Qwen3-14B-AWQ · max-num-seqs 4 · max-model-len 16.384 · gpu-memory-utilization 0,85 · hermes / qwen3 — sama persis di keduanya</td></tr>
+    <tr><td>Skenario</td><td colspan="2">Skrip <code>scripts/profil-alur-agent.mts</code> yang sama: 8 pertanyaan pemanasan (tidak dihitung), 8 pertanyaan × 5 secara satu per satu, lalu tahap 1/2/3/5/8 pengguna × 3 pertanyaan. Jeda 120 detik antar tahap. Batas 300 detik per pertanyaan. Kriteria benar sama.</td></tr>
+    <tr><td>Token berpikir</td><td>perkiraan, dari porsi potongan jawaban yang mengalir (stream)</td><td>persis, dari catatan LiteLLM</td></tr>
+    <tr><td>Selisih jam laptop–server</td><td>${nf((DATA.jumlah.A.geser_jam_ms || 0) / 1000)} dtk</td><td>${nf((DATA.jumlah.B.geser_jam_ms || 0) / 1000)} dtk (sudah dikoreksi saat mencocokkan catatan LiteLLM dan GPU)</td></tr>
+    <tr><td>Panggilan model yang cocok di catatan LiteLLM</td><td>${DATA.jumlah.A.cocok}/${DATA.jumlah.A.llm_ok}</td><td>${DATA.jumlah.B.cocok}/${DATA.jumlah.B.llm_ok}</td></tr>
+    <tr><td>Data</td><td>${esc(E.A.folder)}</td><td>${esc(E.B.folder)}</td></tr></tbody></table></div>
+    <p class="ket" style="margin-top:10px">Hal lain yang berbeda dan bisa ikut memengaruhi hasil: versi vLLM (0.33.0 stabil vs nightly), versi LiteLLM, alamat tunnel Cloudflare, serta hari dan jam uji. Di server 4 GPU, cache prompt juga terbagi ke 4 replika, karena LiteLLM memilih replika secara acak (simple-shuffle).</p></div>
+  <div class="card"><h3>Pemeriksaan kewajaran data</h3><div id="mt-c"></div></div>`;
+  tabel($("#mt-c"), { judul: "Pemeriksaan kewajaran data", berkas: "sanity", cari: false, kol: [{ key: "e", label: "Lingkungan" }, { key: "cek", label: "Pemeriksaan", wrap: true }, { key: "lolos", label: "Hasil", html: v => v ? `<span class="cek-ok">lolos</span>` : `<span class="cek-no">tidak</span>` }, { key: "detail", label: "Detail", wrap: true }], rows: cek });
+}
+
+/* ======================= NAVIGASI */
+const VIEWS = [["a", "g5.2xlarge · 1 GPU", () => vInstance("A")], ["b", "g5.12xlarge · 4 GPU", () => { vInstance("B"); vGpu(); }],
+  ["banding", "Perbandingan", () => { vRingkas(); vLatensi(); vKomposisi(); vThroughput(); vAgent(); }], ["jawaban", "Jawaban model", vJawaban], ["metode", "Metodologi", vMetode]];
+const ALIAS_LAMA = { ringkas: "banding", latensi: "banding", komposisi: "banding", throughput: "banding", agent: "banding", gpu: "b" };
+const IKON = '<path d="M4 6h16M4 12h16M4 18h10"/>';
+const SUDAH = {};
+function buka(id, hash = true) {
+  id = ALIAS_LAMA[id] || id;
+  if (!VIEWS.some(v => v[0] === id)) id = "a";
+  VIEWS.forEach(([k]) => { $("#v-" + k).hidden = k !== id; });
+  document.querySelectorAll("[data-view]").forEach(b => { if (b.dataset.view === id) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
+  if (!SUDAH[id]) { VIEWS.find(v => v[0] === id)[2](); SUDAH[id] = true; } else GRAFIK.forEach(gambarUlang);
+  if (hash) history.replaceState(null, "", "#" + id);
+}
+$("#nav").innerHTML = VIEWS.map(([k, t]) => `<button type="button" data-view="${k}"><svg viewBox="0 0 24 24" aria-hidden="true">${IKON}</svg>${t}</button>`).join("");
+$("#mtabs").innerHTML = VIEWS.map(([k, t]) => `<button type="button" data-view="${k}">${t}</button>`).join("");
+document.addEventListener("click", e => { const b = e.target.closest("[data-view]"); if (b) { buka(b.dataset.view); scrollTo({ top: 0 }); } const h = e.target.closest("[data-href]"); if (h) location.href = h.dataset.href; });
+addEventListener("hashchange", () => buka(decodeURIComponent(location.hash.slice(1)), false));
+const temaBtn = $("#tema");
+function pasangTema(t) { document.documentElement.dataset.theme = t; temaBtn.textContent = t === "dark" ? "Tema terang" : "Tema gelap"; temaBtn.setAttribute("aria-pressed", t === "dark"); try { localStorage.setItem("tema-dashboard", t); } catch (e) { } GRAFIK.forEach(gambarUlang); }
+temaBtn.addEventListener("click", () => pasangTema(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
+pasangTema(document.documentElement.dataset.theme === "dark" ? "dark" : "light");
+function renderSemua() { VIEWS.forEach(([k, , f]) => { if (!SUDAH[k]) { const el = $("#v-" + k), h = el.hidden; el.hidden = false; f(); SUDAH[k] = true; el.hidden = h; } }); }
+$("#cetak").addEventListener("click", () => { renderSemua(); setTimeout(() => print(), 50); });
+addEventListener("beforeprint", () => { renderSemua(); VIEWS.forEach(([k]) => { const el = $("#v-" + k); el.dataset.hid = el.hidden; el.hidden = false; }); GRAFIK.forEach(g => { g.el.innerHTML = g.gambar(1000); }); });
+addEventListener("afterprint", () => { VIEWS.forEach(([k]) => { const el = $("#v-" + k); el.hidden = el.dataset.hid === "true"; }); GRAFIK.forEach(gambarUlang); });
+$("#foot").innerHTML = `Laporan tetap, dibuat ${esc(DATA.dibuat)} oleh <code>scripts/banding-gpu.py</code> dari ${esc(E.A.folder)}/ dan ${esc(E.B.folder)}/. Halaman ini tidak terhubung ke server atau layanan apa pun.`;
+buka(decodeURIComponent(location.hash.slice(1)) || "a", false);
+</script>
+</body>
+</html>

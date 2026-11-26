@@ -177,7 +177,7 @@ export function SumberData() {
       {daftar.some((s) => !s.tersedia) && (
         <p className="mt-2 text-xs text-tinta-lemah">
           Sumber bertanda <span className="text-bahaya">belum tersedia</span> tidak bisa dipilih
-          karena tool dan kamus datanya belum ada — memilihnya akan membuat agent kehilangan
+          karena alat dan kamus datanya belum ada — memilihnya akan membuat agen AI kehilangan
           seluruh kemampuan membaca data.
         </p>
       )}

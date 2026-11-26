@@ -456,6 +456,8 @@ export type ToolBaru = {
    * aplikasi sumbernya, yang akan mengejutkan.
    */
   idApps?: string | null;
+  /** Arah urutan. Bawaannya terbaru dulu. */
+  urutArah?: "asc" | "desc";
 };
 
 /**
@@ -529,10 +531,11 @@ export async function buatTool(b: ToolBaru): Promise<HasilUbah> {
         urut_kolom, urut_arah, batas, cakupan_bawaan, contoh_pertanyaan,
         izin, is_active, updated_by)
      SELECT $1, $2, $3, s.id_ai_sumber_data, COALESCE($11::uuid, s.id_apps), $4, '[]'::jsonb,
-            $5, 'desc', $6, $7, $8, $12, false, $9
+            $5, $13, $6, $7, $8, $12, false, $9
        FROM ai_sumber_data s WHERE s.kode = $10`,
     [b.kode, b.nama.trim(), b.deskripsi.trim(), b.kolom, b.urut, b.batas, b.cakupan,
-     b.contoh?.trim() || null, PEMILIK, b.sumber, b.idApps ?? null, b.izin ?? null],
+     b.contoh?.trim() || null, PEMILIK, b.sumber, b.idApps ?? null, b.izin ?? null,
+     b.urutArah === "asc" ? "asc" : "desc"],
   );
 
   lupakanKonfig();

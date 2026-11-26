@@ -1,0 +1,182 @@
+# Product thinking
+
+Turns a vague request into a clear product decision: who it is for, the one job, what is assumed, and which pattern wins, backed by evidence.
+
+> Group Foundation · Delivery Gate area PRODUCT · RYUX 2.22.8. Levels are defined in `SKILL.md`.
+
+Answer these before any layout exists. Write the answers down; they are the brief.
+
+1. **Who** is the user, and in what situation (device, place, time pressure)?
+2. **What** are they trying to finish on this screen?
+3. **Business goal**: what does the product need from this screen?
+4. **Information that matters**: what must they see to decide or act?
+5. **Primary action**: the one thing this screen exists for.
+6. **Constraints**: platform, data that exists, technical or legal limits.
+7. **Success**: how would you know the screen works?
+8. **Assumptions**: everything you had to guess, kept visible and sorted into design assumptions,
+   unconfirmed capabilities, and sample data.
+
+Unknown facts stay assumptions. Do not invent business rules, policies, metrics, user data,
+permissions, pricing, requirements, or API behavior; ask when one materially affects the flow or
+correctness, otherwise leave it out. Mockup content is realistic sample data, labeled (RX-PR-02,
+RX-AS-03).
+
+Find evidence with the ryux MCP (`search_screens`, `get_flow`, `get_local_pattern`) and cite the
+`screen_id`, or call the decision a judgment call.
+
+Lead with the user's outcome, keep only what serves the task, and follow the project's DESIGN.md
+or brand when it exists (write down any deliberate departure).
+
+**Decide with evidence.** For a consequential decision, compare patterns, then choose by context:
+
+```
+Decision:   payment confirmation layout
+Context:    standalone bank transfer, first-time users
+Options:
+  A  QR success screen        scr_...  strength: instant      weakness: little detail
+  B  bank-transfer receipt    scr_...  strength: verifiable   weakness: dense
+  C  marketplace order status scr_...  strength: order link   weakness: not standalone
+Choice:     B, because the context is a standalone transfer
+Evidence:   Strong (2+ comparable screens, same context) | Thin (1, or other context) | None
+Trade-off:  higher density
+```
+
+With **None**, say so: present the options and their trade-offs, or ask. Never invent a reference.
+
+Does not cover: layout or visual decisions (see `knowledge/ux.md` and `knowledge/ui.md`).
+
+## Evidence from RYUX Knowledge
+
+How comparable products frame the same task and offer: `search_screens` (category, flow) and `get_flow` for the full sequence. Without the ryux MCP, say the evidence comes from the design and standards alone.
+
+> Hard Gates always apply, whichever skills are loaded: no invented numbers, people, urgency, business
+> rules, or terms; no placeholder shipped as final; no missing critical states. Labeled sample data is
+> not an invented number; an unconfirmed capability is never presented as confirmed. See `SKILL.md`.
+
+## Rules
+
+### RX-PR-01 [Required] State the context first
+
+- Do: Before designing, write down the user, their task, the business goal, the design intent (what the user must understand, feel, and do), the information that matters, the primary action, the constraints, and what success looks like.
+  - Take what the prompt and DESIGN.md already give.
+  - Ask only when a missing answer materially affects the user flow, what the product can do, or whether the content is correct, or when neither the prompt nor DESIGN.md sets the UI or motion direction: at most three questions in one message, most consequential first, none when the context is complete. A new product or a new look runs Product Discovery first (RX-PR-13).
+  - Otherwise make the smallest reasonable assumption, write it down, and continue.
+- Do not: Start from a generic template with no stated user or task, or ask questions the prompt or DESIGN.md already answers.
+- Why: Without a task, design and review drift into taste. (`capabilities/critique.md` playbook; NNGroup task-based evaluation)
+- Check: review
+
+### RX-PR-02 [Required] [Hard Gate] Unknowns stay assumptions
+
+- Do: Sort what the brief does not say into three kinds:
+  - Design assumptions (low-risk visual or structural choices such as a merchant category icon or grouping by date): decide them from the context.
+  - Unconfirmed capabilities (an action or feature the category usually has, such as sharing a receipt): convention is not proof, so ask when it materially changes the flow or scope; otherwise you may propose it, listed as unconfirmed, never as a requirement.
+  - Users: without research data, describe them as a proto-persona labelled as assumptions, with the questions to ask real users; answers from an AI-simulated user are hypotheses, never research findings.
+  - Facts, claims, and policies: take them only from the brief, the repo, or the product's own docs (feature and tool names, commands, integrations, platforms, pages, fees, timings, guarantees).
+  - A rule the prototype must behave by but nobody decided (what happens when the customer does not answer, a time limit, a charge): the behavior is yours to assume, but its sentence on screen is a promise. Leave the promise out of the copy, or label it on that same screen ("Prototype rule, not decided yet"); a label in DESIGN.md, the code, or your reply never reaches the user.
+  - On a design-tool canvas (Figma, pen.dev), the label is the tool's annotation on that node or its row instead of visible text, for task UI and marketing surfaces alike, and the handoff lists it: the screen is judged as it would ship, and a chip inside the UI competes with the content. A built prototype or code keeps the visible label, beside the value, since nobody sees its annotations.
+- Do not: Invent business rules, policies, guarantees, metrics, user data, permissions, pricing, requirements, or API behavior, or name a tool, command, integration, platform, or page the product does not have. Do not present an unconfirmed capability as a confirmed one. Do not show an undecided rule as a plain sentence on screen because it is listed as an assumption somewhere else.
+- Why: Invented facts turn into promises and bugs that someone has to unwind; a screen trimmed to the brief's literal words reads unfinished and hides what still needs confirming. (ryux run 2026-10-02: an unconstrained agent invented a 30-day trial and user counts; ryux visual benchmark 2.6 human rater, 2026-10-13: RYUX screens lost on a missing receipt action; NNGroup proto-personas and synthetic users (AI output is hypotheses, not research); owner review 2026-10-27, ryux run: food-delivery benchmark rounds 1 and 2, the no-answer rule for an unavailable item labelled an assumption only in DESIGN.md and the reply, read as fact on the screen; ryux run: laundry Figma benchmark 2026-11-05, the gate reported 22 tagged / 22 shown while a Rp10.000 fee repeated on six screens had no label naming it; reruns with the listing, 2026-11-06: B3 missed the payment rule (no listing word for it), and on a new brief (Pasarku payment) the delivery fee sat 44 px from a label naming the payment fee and was judged labelled, while the gate counted rule kinds (6/6); the listing now checks the label's word itself; owner blind review 2026-11-09 of the checkout head-to-head (docs/benchmarks/checkout): the "not decided" chips inside the UI competed with the content and the total; owner decision: on a design-tool canvas the label is an annotation on the node, for task UI too)
+- Not when: This rule is not a reason to drop content the brief implies or to leave a screen looking unfinished: sample content is RX-AS-03, design assumptions are yours to make.
+- Check: compare every product fact on the screen (features, prices, fees, policies, names, integrations) with the brief, DESIGN.md, docs, or repo; each is sourced, or labelled as an assumption on the same screen (on a design-tool canvas, by an annotation on the node); then sweep: list every undecided rule and number (Assumptions, open questions, DESIGN.md), search the text of every screen for each, and count them with the listing in capabilities/design.md (one rule on one screen is the unit; every amount is placed as an open rule, a fact, or sample data; a fee the brief does not set is an open rule; labelled only when a label beside it contains the rule's word, or on a design-tool canvas an annotation on it or its row does), never from memory; report open rules on screen <tagged>/<shown>; fails on one shown as fact without a source, labelled only outside the screen (a read-me board or notes frame counts as outside), or a count that the listing does not reproduce
+
+### RX-PR-03 [Required] [Hard Gate] One clear goal; one primary action when the task has one
+
+- Do: Give each screen one clear, dominant goal. When the task has a clear next step (a form, checkout, a confirmation), give it one primary action and make secondary actions look secondary.
+- Do not: Put two equal-weight calls to action side by side.
+- Why: A single clear path shortens the decision and the task. (Hick's law (Hick 1952; Hyman 1953): more options, longer decisions; NNGroup visual hierarchy; choice overload (Iyengar and Lepper 2000): a longer list of options can lower the chance that anyone chooses at all)
+- Not when: Monitoring and configuration screens (dashboards, settings) need a clear goal but not a single dominant action; do not invent one to satisfy this rule.
+- Check: name the screen's goal and its primary action, then count the controls styled as primary in the main state; fails when two compete at the same weight
+
+### RX-PR-04 [Required] Back decisions with real screens
+
+- Do: Cite at least one real screen_id for each meaningful design decision, or label it a judgment call with no reference.
+- Do not: Claim "apps usually do X" without a screen to show it.
+- Why: A cited screen makes a decision checkable instead of a matter of opinion. (ryux evidence principle)
+- Check: search_screens, delivery_gate
+
+### RX-PR-05 [Required] The product's market first
+
+- Do: Start from how users in the product's own market pay, sign in, write addresses, and read money and dates; check a pattern from another market before reusing it.
+  - Take the market from the brief or the codebase, and ask when it is unclear. When you ask, propose no market as your default: RYUX's own examples are Indonesian, the product may not be. If you must proceed without an answer, follow the brief's language and its common currency, and list it under Assumptions.
+  - When the brief does not name payment methods (or another market-standard capability), show the market's standard set as unconfirmed capabilities, labeled as proposed in Assumptions, rather than leaving them out: a market's table stakes are not "for later" (RX-AS-06). Ask when the set would change the flow.
+- Do not: Import one market's checkout, currency, language, or tax rules into a product built for another market.
+- Why: Payment, address, and trust habits differ by market (local payment rails, address formats, messaging channels). (ryux taxonomy of local patterns; wallet-detail benchmark, 2.19.2: 3 of 3 runs proposed Indonesia and IDR as the default for a brief with no market)
+- Check: search_screens
+
+### RX-PR-09 [Required] Compare patterns before choosing
+
+- Do: For a consequential decision (a new flow, payment, identity, navigation), list two or three candidate patterns with their context, strength, and weakness, then choose the one whose context matches, not the one that looks best.
+- Do not: Pick the first familiar pattern, or choose by taste.
+- Why: A pattern is right for a context, not in general; comparing makes the reason visible and checkable. (ryux evidence principle; NNGroup competitive usability practice)
+- Not when: small, reversible decisions inside an established pattern; follow the design system instead
+- Trade-off: takes longer than picking the familiar option
+- Check: search_screens, compare_apps
+
+### RX-PR-10 [Required] Say when the evidence is not enough
+
+- Do: Rate the evidence for a decision as Strong (two or more comparable screens in the same context), Thin (one, or a different context), or None; when it is None on a consequential choice, present the options and their trade-offs or ask, instead of picking silently.
+- Do not: Invent a reference, or present a judgment call as if real products backed it.
+- Why: Knowing what you do not know is part of design judgment; false certainty ships the wrong pattern. (ryux evidence principle)
+- Check: review
+
+### RX-PR-11 [Contextual] An AI feature has a written standard for its output
+
+- When: the product shows content generated by AI: an answer, a summary, a draft, a recommendation
+- Do: Before designing it, write what good and bad output look like, per kind of response:
+  - Sort the responses the feature gives (a short answer, an open explanation, a list, a draft, a refusal) and write pass criteria for each kind, concrete enough for a reviewer to check: "answers the question in the first sentence; at most two related details", not "not too verbose".
+  - Design the states generated output brings: a long and a short answer, no answer or a refusal, an answer that is wrong, slow generation, and a failed request (RX-EC-01).
+  - Hand the criteria to the team as the feature's test: real inputs checked against them before launch, and again after every model or prompt change.
+- Do not: Design an AI feature around one ideal sample answer, judge its output by feel, or leave out the states where the output is wrong, empty, or slow.
+- Why: Generated output cannot be specified exactly, so the design is only as good as its definition of good; a screen built around one perfect answer breaks on the next one. (NNGroup design critique in the AI era (criteria per response type; judge, evaluate, iterate; watch for regressions); RX-EC-01)
+- Not when: AI that works behind the scenes and shows users no generated content
+- Trade-off: criteria per response type take time before the first screen and need real inputs to write well
+- Check: review: a criteria list per response type, and the wrong, empty, slow, and failed states in the design
+
+### RX-PR-12 [Contextual] A DESIGN.md answers five questions or names what is unknown
+
+- When: writing or updating DESIGN.md from a brief, product docs, references, or an existing product
+- Do: Write DESIGN.md so it answers, each from a named source:
+  - who the users are and what they need
+  - which job they want done, and what done looks like
+  - what evidence supports each design decision, with its strength (Strong, Thin, None)
+  - which interaction patterns fit the context, and why
+  - how the result is evaluated: success criteria, machine checks, the riskiest assumption and its cheapest test
+  - and, apart from the five, the product's design principles: three to five value statements, each "X over Y" with why it matters to these users and where it gives way, so a trade-off is decided by a stated value, not by taste. They come from the user, the brief, or research; ones you propose are marked proposed until the team confirms them.
+  - Ask in rounds of at most three questions until each has an answer or a recorded Unknown; values you choose (colors, type, timing) are tokens with a one-line reason, marked proposed until the team confirms them. When updating, keep the lines the user wrote.
+- Do not: Fill a DESIGN.md with personas, research, metrics, or policies nobody gave, present your chosen values as the team's, rewrite lines the user wrote without asking, or write a design principle that takes no side ("simple and powerful"), or one you made up, as the team's.
+- Why: DESIGN.md is what every later task reads first: an invented user or rule there spreads into every screen, and a file that only lists colors leaves the next agent to guess the user and the job. (owner review 2026-10-27; ryux run: wallet-expressive benchmark rounds 2 and 3 (a DESIGN.md that dictated values tested spec-following; one that named only character left the values unexplained); RX-PR-02, RX-PR-10; design principles as value statements that take a side and decide trade-offs: NNGroup, Crafting Product-Specific Design Principles (Rosala 2020); owner decision 2026-11-06)
+- Trade-off: takes a few rounds of questions before the first screen
+- Check: review: the five questions each answered with a source or listed under Open questions; three to five design principles that each take a side, sourced or marked proposed; chosen tokens marked proposed with a reason
+
+### RX-PR-13 [Preferred] Before a direction, learn what makes this product specific
+
+- When: a new product, a new look, or an expressive surface, and the prompt, DESIGN.md, and the product docs do not say who exactly it is for and why they would choose it, or what the product does and which numbers may be shown
+- Do: Before any visual direction, ask what the context does not answer, in one message of five questions at most, as choices with a recommended answer and room for the user's own:
+  - who exactly: the group, their moment, and what they use today
+  - why they would choose it over what they use now
+  - its character in three words and what it must never feel like; recommend a personality (warm, bold, witty, proud) from the audience and the why, never a word for restraint (plain, clean, minimal): restraint is how a page behaves, not who the product is
+  - one product or site whose look they like, and one they do not
+  - the page's status and goal: live or not, and what the visitor should do
+  - what the page can say: the three things people do in the product, the numbers that may be shown (a minimum, a fee, a limit), and whether real screenshots or photos exist; ask these even when who and why are known
+  - the product facts (RX-PR-01), and for a fact with a mark (a store, a partner, a regulator) its official files (RX-UI-28)
+  - Record each answer in the DESIGN.md context (Audience, Why choose it, UI direction, Taste references, Design intent, What people do in it, Numbers that may be shown); a missing or blank field is unanswered, and Confirmed capabilities does not say what people do.
+  - When the user hands a question back, infer that answer, label it inferred, and continue.
+- Do not: Build directions from the category alone (every gold app gets a gold shop), recommend plain, clean, or minimal as the character, ask open questions with no options, ask what the context already answers, or treat an inferred answer as the user's.
+- Why: Without the product's own audience and reason to exist, an agent fills the gap with the category's cliché, so every product of a kind gets the same look; the answers are what make the direction specific. (Brand strategy and design discovery practice (audience, positioning, personality, references before visual work); landing-gold rounds 3 and 4 and owner trials T1 to T9, 2026-10-31 (docs/benchmarks/landing-gold): with only the category to go on, every RYUX run proposed the same gold-shop direction, and without content questions the pages stayed thin; owner review)
+- Not when: the context already answers them, or a small change inside an existing product
+- Trade-off: one more round of questions before any design; the answers are kept, so it is asked once per product
+- Check: review: the questions asked or the answers cited from the context, each recorded in DESIGN.md or marked inferred
+
+### RX-PR-14 [Required] Every shaping decision carries its reason
+
+- When: a design, a direction, or a page is delivered
+- Do: Write the design rationale before the Delivery Gate: the five to seven decisions that shape the result (the direction and concept, the weight carrier, the section order, the palette, the type, where the primary action sits, and what was cut), one line each:
+  - **Decision** → **because**: the user, the brief, or the evidence it answers, with its source and strength (Strong, Thin, None) → **principle**: the UX principle it applies, by name, and how it works here (a law of UX, a Nielsen heuristic, a Gestalt principle, or the platform's convention), with where it stops applying when that matters; a RYUX rule ID, name, or title is not a principle, so name the principle behind it; the line on what was cut names one too. A line with a cost trades one value for another: also name the design principle, from DESIGN.md or the brief, that decided it; a cost a decided fact forced names that fact in place of the design principle, and the UX principle stays; else say none is written (a judgment call) → **cost**: what it gives up → **would change if**: the result or fact that would reverse it
+  - Name the alternative that lost and why, in the line or right after it.
+  - A reason points to a person, a task, or a fact ("first-job savers distrust gold shops, so trust comes second, before how it works"), never to a taste word: modern, clean, premium, elegant, and sleek are not reasons.
+  - A choice made on judgment says so (evidence None); a cultural or visual reference names what it means and why it fits.
+- Do not: Describe what was made and call it the rationale, give a reason that only restates the choice ("indigo, because indigo feels trustworthy"), cite research, users, or numbers nobody gave (RX-AS-01, RX-PR-02), explain every small choice, name a principle without saying how it applies to this screen, cite one that does not fit the decision, or put rule IDs and evidence codes on the canvas.
+- Why: A design whose reasons are missing can only be liked or disliked; with its reasons it can be checked, argued with, and changed for the right cause, and the next person keeps what was deliberate. (Design rationale practice (a decision recorded with its goal, the options weighed, and its cost); NNGroup design critique (feedback tied to goals, not taste); owner review 2026-11-02 of trial T10: the final message listed what was made and its risks, but not why the concept, colour, type, or order were chosen; owner request 2026-11-06: the rationale explains each decision with the UX principle behind it, in the chat and on the canvas)
+- Not when: a small change inside an existing product, where one line on what changed and why is enough
+- Trade-off: a longer final message; five to seven lines, not a receipt for every choice
+- Check: review: five to seven rationale lines, each with a user, brief, or evidence reason and its strength, a UX principle named and applied to this screen, a cost, and what would change it; the losing alternative named; no taste word as a reason; on a design-tool canvas, the annotations beside the frames, each naming its principle in plain words, and the final message saying how many, where, and how to see them

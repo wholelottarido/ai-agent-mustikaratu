@@ -27,8 +27,9 @@ import { MAX_ROWS } from "./db";
 import { createOllama } from "ollama-ai-provider-v2";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { simulateStreamingMiddleware, wrapLanguageModel } from "ai";
+import { buatFetchGateway } from "@/lib/gateway-fetch";
 import {
-  alamatOllama, alamatBifrost, alamatQwen, timeoutQwen,
+  alamatOllama, alamatBifrost, alamatGateway, modelGateway, kunciGateway, alamatQwen, timeoutQwen,
   ambilModel, MODEL_DEFAULT, NUM_CTX_LOKAL,
 } from "./models";
 import { SEMUA_DEPARTEMEN, type KonfigDepartemen } from "./departemen";
@@ -667,6 +668,27 @@ const bifrost = createOpenAICompatible({
 });
 
 /**
+ * MR AI Gateway melalui tunnel lokal LiteLLM. Satu klien per model, karena tiap model punya
+ * virtual key sendiri. Dibuat sekali lalu disimpan.
+ */
+const klienGateway = new Map<string, ReturnType<typeof createOpenAICompatible>>();
+function gateway(id: string) {
+  let k = klienGateway.get(id);
+  if (!k) {
+    k = createOpenAICompatible({
+      name: "mr-ai-gateway",
+      baseURL: alamatGateway(id),
+      apiKey: kunciGateway(id),
+      // Retry sekali untuk sambungan yang putus sebelum ada balasan, plus log. Lihat
+      // `lib/gateway-fetch.ts` soal kenapa aman dan kenapa tidak di tingkat agent.
+      fetch: buatFetchGateway(id, modelGateway(id)),
+    });
+    klienGateway.set(id, k);
+  }
+  return k(modelGateway(id));
+}
+
+/**
  * Qwen 14B di Google Colab, lewat tunnel Cloudflare.
  *
  * Endpoint-nya OpenAI-compatible, jadi memakai klien yang sama dengan
@@ -700,6 +722,7 @@ export function pilihModel(kandidat: unknown) {
   const m = ambilModel(kandidat ?? MODEL_DEFAULT);
   if (m.penyedia === "lokal") return ollama(m.id);
   if (m.penyedia === "server") return bifrost(m.id);
+  if (m.penyedia === "gateway") return gateway(m.id);
   /**
    * ⚠️ QWEN DI COLAB TIDAK MENDUKUNG STREAMING — dan gagalnya keras.
    *

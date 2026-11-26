@@ -136,18 +136,38 @@ export async function aksesUntukEmployee(idEmployee: string): Promise<AksesPemak
   // Ditarik terpisah karena `role_menu.permissions` bertipe `text[]`, bukan
   // jsonb seperti `apps_config` -- menggabungkannya ke query di atas sempat
   // gagal justru karena pencampuran dua tipe itu.
-  const { rows: barisIzin } = await poolPerusahaan().query<{ kode: string }>(
-    `SELECT DISTINCT k AS kode
+  //
+  // ⚠️ IZIN DICATAT PER APLIKASI, BUKAN CUMA DIGABUNG (26 Nov 2026).
+  //
+  // Sistem AI tim lain memeriksa izin dari peran DI APLIKASI PEMILIK ALAT:
+  // pesan tolaknya di `ai_tool_log` berbunyi "Role Anda di aplikasi Upload DIS
+  // tidak memiliki akses ke menu yang dibutuhkan (file-list:read)". Kode izin
+  // seperti `dashboard:read` dipakai banyak aplikasi; kalau digabung, peran di
+  // Marketing bisa meloloskan alat Super Tools. Gabungannya (`izin`) tetap ada
+  // untuk alat tanpa `id_apps`.
+  //
+  // Peran yang tidak punya baris `role_menu` tetap ikut (LEFT JOIN): perannya
+  // dipakai juga untuk `ai_tool_cakupan`, walau tidak membawa izin apa pun.
+  const { rows: barisIzin } = await poolPerusahaan().query<{ app_id: string; role_id: string; kode: string | null }>(
+    `SELECT DISTINCT ap->>'app_id' AS app_id, rr->>'role_id' AS role_id, k AS kode
        FROM employee e
        JOIN users_config uc ON uc.id_users = e.id_users
        CROSS JOIN LATERAL jsonb_array_elements(COALESCE(uc.apps_config->'apps', '[]'::jsonb)) ap
        CROSS JOIN LATERAL jsonb_array_elements(COALESCE(ap->'roles', '[]'::jsonb)) rr
-       JOIN role_menu rm ON rr->>'role_id' ~ $2 AND rm.id_roles = (rr->>'role_id')::uuid
-       CROSS JOIN LATERAL unnest(COALESCE(rm.permissions, '{}')) AS k
-      WHERE e.id_employee = $1`,
+       LEFT JOIN role_menu rm ON rr->>'role_id' ~ $2 AND rm.id_roles = (rr->>'role_id')::uuid
+       LEFT JOIN LATERAL unnest(COALESCE(rm.permissions, '{}')) AS k ON true
+      WHERE e.id_employee = $1 AND rr->>'role_id' ~ $2`,
     [idEmployee, UUID],
   );
-  const izin = barisIzin.map((x) => x.kode).sort();
+  const izin = [...new Set(barisIzin.map((x) => x.kode).filter((k): k is string => Boolean(k)))].sort();
+  const izinPerApp: Record<string, string[]> = {};
+  for (const b of barisIzin) {
+    if (!b.app_id) continue;
+    const s = (izinPerApp[b.app_id] ??= []);
+    if (b.kode && !s.includes(b.kode)) s.push(b.kode);
+  }
+  for (const s of Object.values(izinPerApp)) s.sort();
+  const peran = [...new Set(barisIzin.map((x) => x.role_id))].sort();
 
   const apps: string[] = [];
   const diabaikan: AksesPemakai["diabaikan"] = [];
@@ -178,6 +198,11 @@ export async function aksesUntukEmployee(idEmployee: string): Promise<AksesPemak
       // yang dikenal manusia ("Trade Marketing"), bukan slug portal.
       namaDepartemen: r.nama_departemen,
       izin,
+      izinPerApp,
+      peran,
+      namaApp: Object.fromEntries(
+        rows.filter((b) => b.app_id && b.app_nama).map((b) => [b.app_id as string, b.app_nama as string]),
+      ),
     },
     apps,
     diabaikan,

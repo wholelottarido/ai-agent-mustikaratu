@@ -42,6 +42,7 @@ next-env.d.ts
 
 # jangan ignore template kredensial (isinya kosong)
 !.env.example
+!.env.mr-ai-gateway.example
 
 # indeks vektor hasil generate (bisa dibuat ulang: npm run index:teks)
 /data/indeks-*.json
@@ -70,3 +71,46 @@ wa-bot/auth/
 # riwayat commit -- riwayat git tidak bisa dibersihkan belakangan tanpa menulis
 # ulang seluruh commit.
 claude_context/
+
+# layanan ramalan Python
+/forecast-service/.venv/
+__pycache__/
+
+# Rapor ketepatan ramalan: angka penjualan asli per produk
+/data/rapor-ramalan-*.json
+
+# Hasil uji beban (data mentah)
+/data/uji-beban-*
+# Profil latensi alur agent (span, hasil per pertanyaan, catatan LiteLLM/vLLM) — scripts/profil-alur-agent.mts
+/data/agent-workflow-latency/
+
+# Cadangan sebelum perubahan (Tahap 2, 24 Nov 2026). Folder ini bukan repositori Git; cadangan tidak boleh ikut terdorong.
+/.cadangan/
+
+# ---- Ditambah 26 Nov 2026 (pemeriksaan sebelum push; repo ini PUBLIK) ----
+
+# Hasil build Next.js proyek kedua. Pola `/.next/` di atas cuma menutup akar repo.
+**/.next/
+**/node_modules/
+
+# Log lokal: `.cloudflared-demo.log` memuat ratusan alamat tunnel + IP,
+# `.next-dev-console.log` keluaran server dev.
+*.log
+
+# Cadangan apps_config akun ridho sebelum `scripts/beri-peran-lengkap.mts`
+# menulis peran (26 Nov 2026). Isinya UUID akun & pemberian akses; satu-satunya
+# jalan pulang `--batal`, jadi tetap di laptop.
+/data/peran-lengkap-cadangan*.json
+
+# Data mentah benchmark (catatan server, IP EC2, jawaban model atas data
+# perusahaan). Ringkasannya sudah ada di docs/benchmark/.
+/data/benchmark-*
+/data/litellm-waktu-*
+/data/profil-agent-*
+# Cadangan / versi tertimpa dashboard lama — salinan, bukan sumber.
+/data/cadangan-*.html
+/data/tertimpa-*.html
+
+# Dokumen milik orang lain (bernama penulis). Repo ini publik; buka aturan ini
+# hanya kalau pemiliknya setuju dokumennya ikut terbit.
+/docs/**/*.pdf

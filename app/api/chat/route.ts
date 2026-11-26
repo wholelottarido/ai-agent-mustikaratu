@@ -1,5 +1,6 @@
 import { after } from "next/server";
 import type { Agent } from "@voltagent/core";
+import { createUIMessageStream, createUIMessageStreamResponse, type UIMessage } from "ai";
 import { cookies } from "next/headers";
 import { sumberAktif } from "@/lib/sumber-db";
 import { setWaitUntil } from "@voltagent/core";
@@ -17,10 +18,34 @@ import {
 } from "@/voltagent";
 import {
   ambilModel, alamatOllama, ollamaHidup, pesanGalatOllama,
-  alamatQwen, qwenHidup,
+  alamatGateway, gatewayHidup, maksToolGatewayModel, pesanGalatGateway, alamatQwen, qwenHidup,
 } from "@/voltagent/models";
 import { siapkanAgent, jalurDiminta } from "@/voltagent/jalur-agent";
+import { maksBarisServer, maksToolServer } from "@/voltagent/agent-konfig";
 import type { Rancangan } from "@/voltagent/registry-tulis";
+import type { Klarifikasi, RujukanSop } from "@/voltagent/tool-konfigurasi";
+import type { ProgresTool } from "@/voltagent/tool-konfigurasi";
+import type { PenjagaAlur } from "@/lib/alur/penjaga-alur";
+import { jagaStream } from "@/lib/alur/jaga-stream";
+
+type PesanChat = UIMessage<unknown, { progres: ProgresTool }>;
+
+type KanalProgres = {
+  tertunda: ProgresTool[];
+  tulis?: (progres: ProgresTool) => void;
+  kirim: (progres: ProgresTool) => void;
+};
+
+function buatKanalProgres(): KanalProgres {
+  const kanal: KanalProgres = {
+    tertunda: [],
+    kirim(progres) {
+      if (kanal.tulis) kanal.tulis(progres);
+      else kanal.tertunda.push(progres);
+    },
+  };
+  return kanal;
+}
 
 /**
  * Membungkus hasil stream jadi respons, sama untuk kedua jalur agent.
@@ -31,7 +56,25 @@ import type { Rancangan } from "@/voltagent/registry-tulis";
  */
 type HasilStream = Awaited<ReturnType<Agent["streamText"]>>;
 
-function balas(result: HasilStream, idPakai: number, sumber?: string[], rancangan?: Rancangan[], alat?: string[]) {
+function pesanGalatStream(error: unknown): string {
+  return (
+    pesanGalatGateway(error) ??
+    (error instanceof Error ? error.message : "Proses jawaban gagal.")
+  );
+}
+
+function balas(
+  result: HasilStream,
+  idPakai: number,
+  sumber?: string[],
+  rancangan?: Rancangan[],
+  alat?: string[],
+  klarifikasi?: Klarifikasi[],
+  sop?: RujukanSop[],
+  kanal?: KanalProgres,
+  /** Tahap 2: penyaring teks + teks penutup. Hanya jalur konfigurasi (perute) yang memilikinya. */
+  penjaga?: PenjagaAlur,
+) {
   // Jumlah token baru diketahui setelah stream selesai, sementara respons
   // harus dikembalikan SEKARANG. Jadi dicatat di latar -- dan kegagalannya
   // tidak boleh merusak jawaban yang sudah jadi.
@@ -46,7 +89,10 @@ function balas(result: HasilStream, idPakai: number, sumber?: string[], rancanga
   // Token dikirim ke klien lewat metadata pesan. Part `finish` bawaan cuma
   // memuat `finishReason` -- tanpa ini jumlah token tidak pernah sampai ke
   // tampilan, walaupun sudah tercatat di tabel `pemakaian`.
-  return result.toUIMessageStreamResponse({
+  const opsi = {
+    // Error dapat terjadi sesudah header respons terkirim. Karena itu pesan
+    // ramah harus dipasang pada stream, bukan hanya pada catch route POST.
+    onError: pesanGalatStream,
     messageMetadata: ({ part }) => {
       if (part.type !== "finish") return undefined;
 
@@ -91,13 +137,59 @@ function balas(result: HasilStream, idPakai: number, sumber?: string[], rancanga
         ? { rancangan: rancangan[rancangan.length - 1] }
         : undefined;
 
+      // ⚠️ Daftar "produk yang mana?" ikut DI SINI, sebab yang sama dengan
+      // rancangan di atas: tool agent bawahan tidak sampai ke klien, jadi
+      // tombol pilihannya tidak akan pernah muncul kalau dibaca dari part.
+      //
+      // Yang dikirim cuma yang TERAKHIR. Satu jawaban yang menanyakan dua
+      // produk sekaligus akan memunculkan dua daftar tombol yang sulit
+      // dibedakan, dan user tidak punya cara tahu tombol mana untuk yang mana.
+      const tanya = klarifikasi && klarifikasi.length > 0
+        ? { klarifikasi: klarifikasi[klarifikasi.length - 1] }
+        : undefined;
+      const rujukanSop = sop && sop.length > 0 ? { sop: [...sop] } : undefined;
+      // Alasan berhenti, supaya klien bisa membedakan "jatah langkah habis" (`tool-calls`) dari
+      // jawaban yang memang kosong. Dulu keduanya, ditambah galat sambungan, sama-sama tampil
+      // sebagai "terlalu banyak langkah" (11 Nov 2026).
+      const selesai = typeof part.finishReason === "string" ? { selesai: part.finishReason } : undefined;
+
       if (masuk === undefined && keluar === undefined) {
-        return dariKonfig || draf || dipakai ? { ...dariKonfig, ...dipakai, ...draf } : undefined;
+        return dariKonfig || draf || dipakai || tanya || rujukanSop || selesai
+          ? { ...dariKonfig, ...dipakai, ...draf, ...tanya, ...rujukanSop, ...selesai }
+          : undefined;
       }
 
-      return { token: { masuk: masuk ?? null, keluar: keluar ?? null }, ...dariKonfig, ...dipakai, ...draf };
+      return {
+        token: { masuk: masuk ?? null, keluar: keluar ?? null },
+        ...dariKonfig, ...dipakai, ...draf, ...tanya, ...rujukanSop, ...selesai,
+      };
     },
+  } satisfies Parameters<typeof result.toUIMessageStream<PesanChat>>[0];
+
+  if (!kanal && !penjaga) return result.toUIMessageStreamResponse<PesanChat>(opsi);
+
+  // ⚠️ Teks perute disaring DI SINI, sebelum potongannya dikirim ke browser — bukan sesudah. Lihat
+  // `lib/alur/jaga-stream.ts` untuk alasan `outputGuardrails` VoltAgent tidak dipakai.
+  const ui = result.toUIMessageStream<PesanChat>(opsi);
+  const stream = createUIMessageStream<PesanChat>({
+    execute: ({ writer }) => {
+      if (kanal) {
+        kanal.tulis = (progres) => {
+          writer.write({ type: "data-progres", data: progres });
+        };
+        for (const progres of kanal.tertunda.splice(0)) kanal.tulis(progres);
+      }
+      writer.merge(penjaga ? jagaStream(ui, penjaga, "ui", () => {
+        // Ringkasan penjaga, tanpa isi pesan pengguna. Hanya kalau ada yang ditindak.
+        const k = penjaga.keadaan();
+        if (k.ditolak.length || k.berhenti || k.pelanggaran.length || k.penutup !== "tidak-perlu") {
+          console.info(`[/api/chat] penjaga ${k.idPermintaan}: ${JSON.stringify({ ...k, idPermintaan: undefined })}`);
+        }
+      }) : ui);
+    },
+    onError: pesanGalatStream,
   });
+  return createUIMessageStreamResponse({ stream });
 }
 
 export async function POST(req: Request) {
@@ -154,6 +246,19 @@ export async function POST(req: Request) {
       );
     }
 
+    if (pilihan.penyedia === "gateway" && !(await gatewayHidup(pilihan.id))) {
+      return Response.json(
+        {
+          error:
+            // Alamat gateway tidak dikirim ke browser; cukup nama variabel env-nya untuk admin.
+            `Model "${pilihan.label}" tidak bisa dihubungi melalui gateway${alamatGateway(pilihan.id) ? "" : " (alamat gateway belum disetel)"}` +
+            ` (${pilihan.id === "mr-ai-gateway-4gpu" ? "AI_BASE_URL_2" : "AI_BASE_URL"}). ` +
+            "Pastikan tunnel MR AI Gateway dan LiteLLM sedang berjalan, lalu coba lagi atau pilih model lain.",
+        },
+        { status: 503 },
+      );
+    }
+
     // Kuota diperiksa SEBELUM apa pun ditulis atau dipanggil. Model lokal
     // selalu lolos -- dia tidak memakai kredit API.
     const kuota = await cekKuota(sesi.id, modelDipakai);
@@ -192,7 +297,18 @@ export async function POST(req: Request) {
     // Jalur `konfigurasi` memakai agent per aplikasi yang dibaca dari database
     // perusahaan; jalur `lama` memakai agent per departemen yang ditulis di
     // kode. Yang menentukan `JALUR_AGENT` di environment, bawaannya `lama`.
-    const jalur = await siapkanAgent(sesi.idEmployee);
+    const kanalProgres = buatKanalProgres();
+    const jalur = await siapkanAgent(
+      sesi.idEmployee,
+      pilihan.penyedia === "gateway"
+        ? maksToolGatewayModel(pilihan.id)
+        : pilihan.penyedia === "server"
+          ? maksToolServer()
+          : undefined,
+      kanalProgres.kirim,
+      // Hanya server kantor (Gemma 8.192 token). Gateway/Qwen sengaja tidak: angka benchmark tetap sebanding.
+      pilihan.penyedia === "server" ? maksBarisServer() : undefined,
+    );
 
     if (jalur.jalur === "konfigurasi") {
       // Identitas penyaring sudah tertanam di dalam tool-nya waktu agent ini
@@ -211,7 +327,8 @@ export async function POST(req: Request) {
       const hasil = await jalur.agent.streamText(messages, {
         context: { [KUNCI_MODEL]: modelDipakai, [KUNCI_SALURAN]: "web" },
       });
-      return balas(hasil, idPakai, jalur.sumber, jalur.rancangan, jalur.alat);
+      const penjaga = jalur.penjaga() ?? undefined;
+      return balas(hasil, idPakai, jalur.sumber, jalur.rancangan, jalur.alat, jalur.klarifikasi, jalur.sop, kanalProgres, penjaga);
     }
 
     // Jatuh ke jalur lama. Sebabnya DICATAT, tidak pernah diam-diam -- saklar
@@ -260,6 +377,9 @@ export async function POST(req: Request) {
     // dengan saran yang bisa ditindaklanjuti, bukan stack trace.
     const ramah = pesanGalatOllama(error);
     if (ramah) return Response.json({ error: ramah }, { status: 503 });
+
+    const galatGateway = pesanGalatGateway(error);
+    if (galatGateway) return Response.json({ error: galatGateway }, { status: 503 });
 
     const pesan = error instanceof Error ? error.message : "Kesalahan tidak dikenal";
     return Response.json({ error: pesan }, { status: 500 });

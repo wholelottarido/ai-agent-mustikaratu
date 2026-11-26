@@ -23,9 +23,9 @@ export default function HalamanSumber() {
     <main className="mx-auto min-h-dvh max-w-3xl bg-kertas px-4 py-8">
       <header className="mb-6 flex items-start justify-between gap-4">
         <div className="min-w-0">
-          <h1 className="text-xl font-semibold tracking-tight">Sumber data agent</h1>
+          <h1 className="text-xl font-semibold tracking-tight">Sumber data agen AI</h1>
           <p className="mt-1 text-sm text-tinta-lemah">
-            Agent membaca dari <span className="font-medium text-tinta">satu</span> sumber saja.
+            Agen AI membaca dari <span className="font-medium text-tinta">satu</span> sumber saja.
             Mengganti ini mengubah data yang dibaca seluruh departemen.
           </p>
         </div>

@@ -11,7 +11,7 @@
  *     -> { selesai: true, ... }
  *
  * ⚠️ Akun email dipakai bersama, dan itu bawaan sistem perusahaan yang tidak
- * bisa kita ubah -- `unregisted@mustika-ratu.co.id` menempel pada 307 orang.
+ * bisa kita ubah -- `<akun-email-bersama>` menempel pada 307 orang.
  * Portal perusahaan sendiri juga menampilkan pemilih profil seperti ini, jadi
  * kita tidak memperlebar apa pun. Tapi tiap pemilihan DICATAT.
  */

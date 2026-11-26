@@ -32,6 +32,7 @@
 import { poolPerusahaan } from "./db-perusahaan";
 import { sambunganTool } from "./sambung-tool";
 import { daftarTulisDisetujui } from "./tulis-disetujui";
+import { bacaTinjauan, statusTool } from "./tinjau-tool";
 
 /**
  * Cakupan baris yang boleh dilihat. Daftarnya mengikuti CHECK di
@@ -99,6 +100,12 @@ export type KonfigTool = {
   batas: number;
   cakupan: Cakupan;
   /**
+   * Cakupan khusus per peran, dari `ai_tool_cakupan` milik tim lain
+   * (mis. Super Admin Super Tools -> `semua`). Dipilih per pemakai oleh
+   * `cakupanUntuk()` di `lib/izin-tool.ts`. Kosong untuk kebanyakan alat.
+   */
+  cakupanPeran: { idRoles: string; cakupan: Cakupan }[];
+  /**
    * Kode izin yang harus dipunyai pemakai, mis. `ticket:read`.
    *
    * ⚠️ `null` berarti TIDAK ADA SYARAT, bukan "belum diisi". Seluruh tool yang
@@ -137,6 +144,16 @@ export type KonfigTool = {
   syarat: unknown[];
 };
 
+export type KonfigTinjauan = {
+  kode: string;
+  nama: string;
+  deskripsi: string;
+  operasi: string;
+  izin: string | null;
+  agent: string[];
+  status: "menunggu" | "ditolak";
+};
+
 export type KonfigAgent = {
   kode: string;
   nama: string;
@@ -173,6 +190,8 @@ export type Konfig = {
    * seharusnya tidak, berarti aturannya lepas tanpa ada galat apa pun.
    */
   gantian: { agent: string; dipakai: string; menggantikan: string[] }[];
+  /** Tool baru tim lain yang menunggu keputusan atau sudah ditolak. Tidak dipakai agent mana pun. */
+  tinjauan: KonfigTinjauan[];
   dibacaPada: number;
 };
 
@@ -263,6 +282,29 @@ const MILIK_KITA = "magang";
  * punya penggantinya, dan membuangnya dari daftar akan menyembunyikan bahwa
  * agent itu sebenarnya bisa menulis.
  */
+/**
+ * Saklar penyelarasan dengan sistem tim lain (26 Nov 2026). Bawaannya sama
+ * dengan perilaku sebelum saklar ini ada.
+ *
+ * `ALAT_PORTAL`:
+ *   - `ganti`  (bawaan) -> alat kita menggantikan alat baca mereka atas tabel yang sama;
+ *   - `tambah`          -> alat kita ditambahkan, alat mereka tetap utuh;
+ *   - `tanpa`           -> alat kita tidak dipasang sama sekali: daftar alat
+ *                          agent persis isi `ai_agent_tool` (dikurangi yang dilepas
+ *                          dari layar Kelola AI).
+ *
+ * `TINJAU_TOOL_BARU`:
+ *   - `nyala` (bawaan) -> alat baru tim lain ditahan sampai diputuskan di Kelola AI;
+ *   - `mati`           -> langsung dipakai seperti di sistem mereka.
+ */
+export function modeAlatPortal(): "ganti" | "tambah" | "tanpa" {
+  const v = process.env.ALAT_PORTAL;
+  return v === "tambah" || v === "tanpa" ? v : "ganti";
+}
+export function tinjauToolBaruNyala(): boolean {
+  return process.env.TINJAU_TOOL_BARU !== "mati";
+}
+
 function pasangTool(
   k: BarisAgent,
   terpaut: KonfigTool[],
@@ -277,7 +319,9 @@ function pasangTool(
   // sistem mereka tetap memakainya — yang berubah cuma apa yang dirakit di
   // sini.
   if (dilepas.length > 0) terpaut = terpaut.filter((t) => !dilepas.includes(t.kode));
-  const dipegang = new Set([k.id_apps, ...(k.apps_lain ?? [])].filter(Boolean) as string[]);
+  const mode = modeAlatPortal();
+  if (mode === "tanpa") return { tool: terpaut, gantian: null };
+  const dipegang =new Set([k.id_apps, ...(k.apps_lain ?? [])].filter(Boolean) as string[]);
   // Dua jalan menempel, dan keduanya perlu:
   //   - kecocokan `id_apps`  -> bawaan, supaya tool baru langsung dipakai
   //                             agent pemegang aplikasinya;
@@ -289,6 +333,11 @@ function pasangTool(
     (t) => (t.idApps && dipegang.has(t.idApps)) || disambung.includes(t.kode),
   );
   if (kita.length === 0) return { tool: terpaut, gantian: null };
+  if (mode === "tambah") {
+    // Alat mereka yang bernama sama dengan alat kita tidak dobel (kode unik di `ai_tool`, tapi jaga-jaga).
+    const kodeKita = new Set(kita.map((t) => t.kode));
+    return { tool: [...kita, ...terpaut.filter((t) => !kodeKita.has(t.kode))], gantian: null };
+  }
 
   // Tabel yang sudah dibaca tool kita. Sumber tanpa `tabel_asal` tidak pernah
   // cocok — lebih baik tool mereka bertahan daripada dibuang karena tebakan.
@@ -327,6 +376,21 @@ async function baca(): Promise<Konfig> {
     pool.query<{ id_ai_agent: string; id_ai_tool: string }>(
       `SELECT id_ai_agent, id_ai_tool FROM ai_agent_tool`),
   ]);
+
+  // Cakupan per peran milik tim lain. Gagal dibaca (tabel hilang / hak dicabut)
+  // = tidak ada cakupan khusus, dan semua alat kembali ke `cakupan_bawaan` —
+  // arah gagal yang lebih sempit, bukan lebih luas.
+  const cakupanQ = await pool
+    .query<{ id_ai_tool: string; id_roles: string; cakupan: string }>(
+      `SELECT id_ai_tool, id_roles, cakupan FROM ai_tool_cakupan`)
+    .catch((e: Error) => {
+      console.warn(`[ai-konfig] ai_tool_cakupan tidak terbaca, cakupan per peran diabaikan: ${e.message}`);
+      return { rows: [] as { id_ai_tool: string; id_roles: string; cakupan: string }[] };
+    });
+  const cakupanPerTool = new Map<string, { idRoles: string; cakupan: Cakupan }[]>();
+  for (const c of cakupanQ.rows) {
+    cakupanPerTool.set(c.id_ai_tool, [...(cakupanPerTool.get(c.id_ai_tool) ?? []), { idRoles: c.id_roles, cakupan: c.cakupan as Cakupan }]);
+  }
 
   // Persetujuan tool tulis tim lain, dari database portal KITA. Dibaca di sini
   // supaya tiap baris `ai_tool` bisa membawa jawabannya sendiri — yang merakit
@@ -439,6 +503,22 @@ async function baca(): Promise<Konfig> {
       tolak(`jenis "kode" tapi tidak menyebut penangan`); continue;
     }
 
+    // Cakupan per peran diperiksa dengan aturan yang SAMA seperti cakupan
+    // bawaan di atas: cakupan sempit tanpa kolom penyaring = query tanpa WHERE.
+    // Yang tidak lolos dibuang satu per satu (alatnya tetap dipakai dengan
+    // cakupan bawaan) dan dicatat di `masalah`.
+    const cakupanPeran = (cakupanPerTool.get(t.id_ai_tool) ?? []).filter((c) => {
+      if (!["diri", "bawahan", "departemen", "perusahaan", "semua"].includes(c.cakupan)) {
+        tolak(`ai_tool_cakupan: cakupan "${c.cakupan}" tidak dikenal, diabaikan`);
+        return false;
+      }
+      if (c.cakupan === "semua" || jenis === "kode" || !sumber) return true;
+      const kol = { diri: sumber.penyaring.employee, bawahan: sumber.penyaring.employee, departemen: sumber.penyaring.departemen, perusahaan: sumber.penyaring.perusahaan }[c.cakupan];
+      if (kol && kolomView.get(sumber.view)?.has(kol)) return true;
+      tolak(`ai_tool_cakupan: cakupan "${c.cakupan}" untuk satu peran tapi ${sumber.kode} tidak punya kolom penyaringnya, diabaikan`);
+      return false;
+    });
+
     toolById.set(t.id_ai_tool, {
       kode: t.kode,
       nama: t.nama,
@@ -452,6 +532,7 @@ async function baca(): Promise<Konfig> {
       urut: { kolom: t.urut_kolom, arah: t.urut_arah === "asc" ? "asc" : "desc" },
       batas: t.batas,
       cakupan,
+      cakupanPeran,
       izin: t.izin,
       contoh: t.contoh_pertanyaan,
       idApps: t.id_apps,
@@ -496,10 +577,30 @@ async function baca(): Promise<Konfig> {
     lepasPerAgent.set(s.agentKode, [...(lepasPerAgent.get(s.agentKode) ?? []), s.toolKode]);
   }
 
+  // Tool baru tim lain ditahan di sini, sebelum dirakit, supaya model tidak pernah melihatnya.
+  const petaTinjau = await bacaTinjauan();
+  const ditahan = new Map<string, KonfigTinjauan>();
+  const tinjauOn = tinjauToolBaruNyala();
+
   const agent: KonfigAgent[] = agentQ.rows.map((a) => {
     const terpaut = (toolAgent.get(a.id_ai_agent) ?? [])
       .map((id) => toolById.get(id))
-      .filter((t): t is KonfigTool => Boolean(t) && t!.aktif);
+      .filter((t): t is KonfigTool => Boolean(t) && t!.aktif)
+      .filter((t) => {
+        if (t.pemilik === MILIK_KITA) return true;
+        if (!tinjauOn) return true;
+        const status = statusTool(petaTinjau, t.kode);
+        if (status !== "menunggu" && status !== "ditolak") return true;
+        const ada = ditahan.get(t.kode);
+        if (ada) ada.agent.push(a.nama);
+        else {
+          ditahan.set(t.kode, {
+            kode: t.kode, nama: t.nama, deskripsi: t.deskripsi, operasi: t.operasi,
+            izin: t.izin, agent: [a.nama], status,
+          });
+        }
+        return false;
+      });
     const hasil = pasangTool(a, terpaut, punyaKita, perAgent.get(a.kode) ?? [], lepasPerAgent.get(a.kode) ?? []);
     if (hasil.gantian) gantian.push({ agent: a.kode, ...hasil.gantian });
     return {
@@ -521,7 +622,8 @@ async function baca(): Promise<Konfig> {
     .filter(([id, t]) => !tersambung.has(id) && !dipakai.has(t.kode))
     .map(([, t]) => t);
 
-  return { agent, lepas, masalah, gantian, dibacaPada: Date.now() };
+  const tinjauan = [...ditahan.values()].sort((x, y) => x.kode.localeCompare(y.kode));
+  return { agent, lepas, masalah, gantian, tinjauan, dibacaPada: Date.now() };
 }
 
 /** Agent pintu masuk. `undefined` kalau belum ada atau sedang dimatikan. */

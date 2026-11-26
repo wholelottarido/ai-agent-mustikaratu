@@ -121,8 +121,11 @@ export function PilihModel({
         <div
           role="listbox"
           aria-label="Pilih model"
-          className="absolute bottom-full left-0 z-20 mb-1.5 w-72 overflow-hidden rounded-2xl bg-permukaan shadow-besar ring-1 ring-garis/60"
+          // Tinggi dibatasi sisa layar: dengan 7 model menu lebih tinggi dari ruang di atas
+          // komposer, dan bagian atasnya tertutup bar atas (11 Nov 2026).
+          className="absolute bottom-full left-0 z-30 mb-1.5 flex max-h-[min(32rem,calc(100dvh-11rem))] w-72 flex-col overflow-hidden rounded-2xl bg-permukaan shadow-besar ring-1 ring-garis/60"
         >
+          <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           {URUTAN.map((grup) => {
             const isi = daftar.filter((m) => m.penyedia === grup);
             if (isi.length === 0) return null;
@@ -168,9 +171,11 @@ export function PilihModel({
             );
           })}
 
-          <p className="bg-kertas/50 px-3 py-2 text-[10px] leading-snug text-tinta-lemah">
-            Model lokal tidak memakai kuota sama sekali. Yang di server kantor
-            tidak membebani komputer ini; yang &quot;komputer ini&quot; butuh
+          </div>
+
+          <p className="shrink-0 border-t border-garis/40 bg-kertas px-3 py-2 text-[10px] leading-snug text-tinta-lemah">
+            Model lokal dan MR AI Gateway tidak memakai kuota API. Model gateway
+            memerlukan tunnel lokal aktif; model &quot;komputer ini&quot; memerlukan
             Ollama menyala.
           </p>
         </div>

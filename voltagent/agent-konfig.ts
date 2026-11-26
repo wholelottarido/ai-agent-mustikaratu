@@ -27,12 +27,34 @@
  */
 import { Agent } from "@voltagent/core";
 import type { KonfigAgent, KonfigTool } from "@/lib/ai-konfig";
+import type { PemegangPenjaga } from "@/lib/alur/penjaga-alur";
+import { hookBawahan, kendaliPerute, teksKemampuan } from "./kendali-alur";
 import { muatKonfig } from "@/lib/ai-konfig";
-import { buatToolDariKonfig, type CatatSumber, type SesiPemakai } from "./tool-konfigurasi";
+import { buatToolDariKonfig, type CatatSumber, type LaporProgres, type SesiPemakai } from "./tool-konfigurasi";
 import { namaUntukModel, type CatatRancangan } from "./registry-tulis";
 import { pilihModel, KUNCI_MODEL, KUNCI_SALURAN } from "./agents";
+import { kemampuanKode } from "./registry-kode";
+import { buatRegistri, jenisAgent, LABEL_JENIS, type AgentKemampuan, type JenisKemampuan } from "@/lib/alur/kemampuan";
 
 export type Saluran = "web" | "wa";
+
+/**
+ * Tahap 3 (rute berdasarkan kemampuan) menyala kecuali `RUTE_KEMAMPUAN=mati`. Saklar ini HANYA mematikan
+ * perubahan Tahap 3 (daftar kemampuan, validasi sebelum delegasi, status hasil handoff, aturan perute versi
+ * kemampuan); penjaga Tahap 2/4/5/6 tetap menyala (mereka punya saklar sendiri: `PENJAGA_ALUR`).
+ */
+export function ruteKemampuanDinyalakan(): boolean {
+  return process.env.RUTE_KEMAMPUAN !== "mati";
+}
+
+/**
+ * Jenis kemampuan satu tool, dari METADATANYA: tool kode → sifat penangannya (`registry-kode.ts`, dijaga tsc);
+ * tool setelan → `operasi` (baca = data, selain itu = tindakan yang menyusun rancangan).
+ */
+export function kemampuanTool(t: KonfigTool): JenisKemampuan {
+  if (t.jenis === "kode") return kemampuanKode(t.penangan) ?? "data";
+  return t.operasi === "baca" ? "data" : "tindakan";
+}
 
 /** Sama dengan jalur lama: 5 langkah bawaan VoltAgent terlalu sedikit. */
 const MAKS_LANGKAH = 12;
@@ -62,7 +84,17 @@ function instruksi(k: KonfigAgent, tool: KonfigTool[], saluran: Saluran): string
       ? "JANGAN memakai tabel markdown — WhatsApp tidak bisa menampilkannya, dan yang sampai ke user cuma pagar `|---|`. Pakai daftar bernomor."
       : "Boleh memakai tabel markdown untuk hasil yang berkolom.";
 
+  // Tanpa tanggal, model mengisi tahun dari ingatannya: "September" jadi 2024 (terlihat 5 Nov 2026).
+  const hariIni = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Jakarta" });
+  const punyaRamalan = tool.some((t) => t.kode === "ramal_penjualan");
+  const punyaCariSop = tool.some((t) => t.kode === "cari_sop");
+  const punyaTiket = tool.some((t) =>
+    ["buat_tiket", "siapkan_tiket", "cari_tiket_serupa"].includes(t.kode),
+  );
+
   return `Kamu ${k.nama}. ${k.deskripsi ?? ""}
+
+Hari ini ${hariIni}. Kalau user menyebut bulan tanpa tahun, artinya bulan itu yang terakhir sudah lewat.
 
 ## Tool yang kamu punya
 
@@ -72,6 +104,17 @@ ${daftarTool(tool)}
 
 1. Jawab HANYA dari hasil tool. Kalau tidak ada tool yang cocok, katakan kamu
    belum bisa mengambil data itu — jangan mengarang angka, nama, atau tanggal.
+   ⚠️ Kalau ada tool yang cocok, PANGGIL DULU dengan kata user apa adanya,
+   sekalipun terdengar umum atau belum lengkap. Jangan bertanya balik lebih
+   dulu: tool yang mencocokkan ke data yang nyata, dan kamu bertanya hanya
+   kalau hasil tool memintanya.
+   ⚠️ Permintaan daftar umum ("tampilkan 5 …", "… terbaru apa saja",
+   "daftar …") = panggil tool yang cocok TANPA filter; isi \`batas_baris\`
+   kalau user menyebut angka. Keterangan tiap tool menyebut urutan hasilnya.
+   "Terbaru" artinya urutan paling baru, BUKAN filter tanggal hari ini —
+   isi filter tanggal hanya kalau user menyebut tanggal atau periode. Kalau
+   tool tidak berurutan menurut waktu, tetap tampilkan hasilnya dan sebut
+   urutannya, jangan menolak atau bertanya balik.
 2. Hasil tool sudah disaring untuk penanya. Kamu TIDAK bisa, dan tidak boleh
    mencoba, melihat data orang lain. Tiap hasil menyebut \`milik\` — itulah
    pemilik barisnya yang sebenarnya.
@@ -80,13 +123,17 @@ ${daftarTool(tool)}
    baris yang kamu terima sebagai milik mereka — menamai data Trade Marketing
    sebagai "klaim departemen HR" itu salah yang lebih berbahaya daripada
    menolak menjawab, karena pembacanya tidak punya cara mengetahuinya.
+   ⚠️ JANGAN pernah menanyakan nama departemen pemakai. Identitas dan
+   departemennya sudah berasal dari akun login dan tertanam pada penyaring
+   tool. Kalau pemakai berkata "departemen saya", panggil tool apa adanya.
 3. Kalau tool mengembalikan \`galat\`, sampaikan isinya apa adanya. Itu bukan
    kegagalan yang perlu kamu tutupi atau tebak jalan keluarnya.
 4. Tiap hasil membawa \`jumlah\` (yang kamu baca) dan \`total\` (yang cocok
    seluruhnya). Kalau \`terpotong: true\`, keduanya BERBEDA.
    ⚠️ Pertanyaan "ada berapa" dijawab dengan \`total\`, BUKAN dengan menghitung
    baris yang kamu terima. Sebutkan juga bahwa yang ditampilkan baru sebagian,
-   mis. "6 dari 22 aset". JANGAN pernah mengatakan tidak ada data lain,
+   memakai nama objek tool yang sedang dipanggil, mis. "6 dari total 22 klaim".
+   JANGAN menyalin nama objek dari contoh ke tool lain. JANGAN pernah mengatakan tidak ada data lain,
    tidak ada tambahan, atau sudah semuanya — \`terpotong: true\` artinya
    justru sebaliknya.
 5. Kode atau angka status yang tidak jelas artinya disebut apa adanya. Jangan
@@ -99,8 +146,71 @@ ${daftarTool(tool)}
    tidak merender rumus, jadi yang terbaca user adalah tulisannya mentah.
 9. Jawab dalam bahasa Indonesia, ringkas, tanpa basa-basi pembuka.${
     tool.some((t) => t.operasi !== "baca") ? ATURAN_RANCANGAN : ""
-  }`;
+  }${punyaCariSop ? ATURAN_CARI_SOP : ""}${
+    punyaCariSop && punyaTiket ? ATURAN_SOP_SEBELUM_TIKET : ""
+  }${punyaRamalan ? ATURAN_METODOLOGI_RAMALAN : ""}`;
 }
+
+const ATURAN_CARI_SOP = `
+
+## Pertanyaan prosedur dan keluhan teknis
+
+Untuk pertanyaan cara melakukan sesuatu, syarat, alur, atau keluhan berupa
+gejala aplikasi/perangkat, panggil \`cari_sop\` lebih dulu. Keluhan seperti
+"aplikasi tidak jalan karena sinyal hilang", "printer bergaris", dan "laptop
+tidak menyala" juga termasuk pencarian panduan, walaupun user tidak menyebut
+kata SOP. Saat memanggil tool, JANGAN menulis kesimpulan atau jawaban awal.
+Tunggu hasil \`cari_sop\`, lalu jawab dari isi dokumen yang ditemukan dan
+sebutkan judul sumbernya.
+Kalau hasilnya tidak benar-benar menjawab, katakan bahwa panduan yang sesuai
+belum ditemukan; jangan merangkai solusi dari dokumen yang tidak relevan dan
+jangan menambahkan prosedur perusahaan dari pengetahuanmu sendiri.`;
+
+const ATURAN_SOP_SEBELUM_TIKET = `
+
+## Urutan panduan dan tiket helpdesk
+
+Jangan langsung membuat atau menyiapkan tiket hanya karena user menyampaikan
+keluhan. Cari panduannya dengan \`cari_sop\` dan berikan langkah penanganannya
+lebih dulu. Tawarkan tiket sebagai langkah lanjutan jika panduan tidak tersedia,
+langkah panduan sudah dicoba tetapi masalah tetap terjadi, atau user memang
+meminta dibuatkan tiket. Jangan memanggil tool pembuatan tiket sebelum salah
+satu kondisi itu terpenuhi.
+
+Kalau tidak ada hasil SOP yang relevan, jawaban WAJIB mengikuti pola ini:
+"Panduan khusus untuk [masalah user] belum ditemukan dalam basis pengetahuan
+SOP. Apakah Anda ingin saya menyiapkan tiket helpdesk untuk tim terkait?"
+Jangan menawarkan \`daftar_sop\` untuk keluhan teknis dan jangan mengarang
+langkah penanganan. Menawarkan tiket belum berarti memanggil tool tiket; tunggu
+user menyetujuinya terlebih dahulu.`;
+
+/**
+ * Fakta metodologi yang sudah diukur dan boleh dijawab tanpa memanggil tool.
+ * Tool ramalan menghitung angka produk; bagian ini mencegah model mengarang
+ * cara kerja sistem saat user bertanya tentang pengaruh jumlah outlet.
+ */
+const ATURAN_METODOLOGI_RAMALAN = `
+
+## Penjelasan metodologi ramalan, outlet, dan distribusi
+
+Kalau user bertanya tentang pengaruh jumlah outlet, pembukaan/penutupan outlet,
+perubahan wilayah, perluasan distribusi, coverage, atau jangkauan penjualan terhadap
+ramalan, jelaskan fakta berikut:
+
+- Jumlah outlet TIDAK dipakai sebagai variabel langsung oleh model saat ini.
+- Riwayat penjualan secara tidak langsung mencerminkan jangkauan outlet pada masa lalu.
+- Perubahan outlet, wilayah, atau distribusi setelah periode data tidak diketahui model.
+  Backtest Juli-September
+  2026 menunjukkan produk dengan outlet bertambah cenderung diramal terlalu rendah, sedangkan
+  produk dengan outlet berkurang cenderung diramal terlalu tinggi.
+- JANGAN mengatakan kondisi seluruh jaringan outlet sudah tercermin untuk masa depan.
+- JANGAN mengubah angka ramalan otomatis berdasarkan pertumbuhan outlet. Penyesuaian sederhana
+  yang diuji belum konsisten: hampir tidak membantu pada jarak 3-5 bulan dan memperburuk hasil
+  pada jarak 1-3 bulan.
+
+Ini adalah penjelasan cara kerja sistem yang sudah diukur, jadi boleh dijawab langsung untuk
+semua pertanyaan serupa. Jangan mengarang angka lain dan jangan menyebutnya sebagai hubungan
+sebab-akibat yang sudah terbukti.`;
 
 /**
  * Aturan tambahan kalau agent punya tool penyusun rancangan.
@@ -117,6 +227,18 @@ const ATURAN_RANCANGAN = `
 Tool ini TIDAK menyimpan apa pun. Ia memulangkan rancangan yang ditampilkan
 ke user beserta tombol konfirmasi, dan TOMBOL ITU yang menyimpan.
 
+- Klaim "rancangan sudah disiapkan" HANYA boleh ditulis sesudah tool
+  \`siapkan_...\` benar-benar dipanggil dan mengembalikan rancangan. Kalau
+  belum ada hasil tool pada giliran ini, klaim itu PALSU.
+- Kalau user menjawab "ya", "boleh", "setuju", "lanjut", atau memberi pilihan
+  terhadap TAWARAN tindakan, panggil tool \`siapkan_...\` yang sesuai saat itu
+  juga. Ini berlaku untuk membuat, mengajukan, mencatat, mengubah, membatalkan,
+  menghapus, menyetujui, dan menolak data — termasuk tiket, penjualan, lembur,
+  pelamar, serta tindakan lain yang tersedia. Jangan menjawab seolah-olah tool
+  sudah dijalankan.
+- Bawa semua konteks yang sudah diberikan user ke parameter tool: objek yang
+  ditindak, perubahan yang diminta, alasan, dan pilihan hasil klarifikasi.
+  Jangan meminta ulang informasi yang sudah ada di percakapan.
 - JANGAN katakan datanya sudah dibuat, sudah masuk, sudah tersimpan, atau
   sudah diproses. Belum. Katakan rancangannya sudah disiapkan dan minta user
   memeriksanya lalu menekan Simpan.
@@ -125,8 +247,47 @@ ke user beserta tombol konfirmasi, dan TOMBOL ITU yang menyimpan.
   sudah menampilkan semuanya. Cukup satu kalimat.
 - Kalau hasilnya \`perlu-perbaikan\`, sebutkan pilihan yang ditawarkan APA
   ADANYA dan tanyakan mana yang dimaksud. Jangan memilihkan.
-- Kalau user bilang "ya" atau "simpan" lewat teks, ingatkan bahwa yang
-  menyimpan adalah tombol di kartu — kamu tidak bisa menekannya untuk dia.`;
+- HANYA jika kartu rancangan sudah tampil lalu user meminta MENYIMPAN lewat
+  teks, ingatkan bahwa yang menyimpan adalah tombol pada kartu. Persetujuan
+  atas tawaran membuat rancangan atau jawaban atas klarifikasi bukan permintaan
+  menekan tombol Simpan.`;
+
+/**
+ * Tahap 3 (F.4): cara perute memilih agent — tujuan pemakai dulu, lalu kemampuan alat.
+ *
+ * ⚠️ RCA Q4 (24 Nov 2026): aturan "utamakan Portal untuk SOP" sudah ada, tapi kalah oleh deskripsi agent lain
+ * yang memuat frasa sama persis ("pengajuan cuti") — 21/58 delegasi pertama salah. Aturan di sini TIDAK menyebut
+ * nama agent; yang dirujuk adalah "Jenis kemampuan" di daftar agent, yang dihitung dari alat terpasang.
+ * Contohnya konseptual (tanpa nama alat/agent/JSON) supaya tidak tersalin sebagai jawaban atau panggilan mentah.
+ * Penegaknya bukan kalimat ini, tetapi penjaga (`periksaKemampuan`) — kalimat ini mengurangi panggilan yang ditolak.
+ */
+const ATURAN_PILIH_AGENT = `
+
+## Memilih agent: tujuan dulu, baru kemampuan
+
+Tentukan APA yang diminta, lalu pilih agent yang ALATNYA bisa memenuhinya
+("Jenis kemampuan" di daftar agent). Kemiripan kata dengan deskripsi agent
+bukan dasar memilih.
+- Cara, syarat, alur, aturan, kebijakan → kemampuan "cari dokumen/SOP/panduan".
+- Keadaan data yang sudah ada (status, sisa, jumlah, riwayat, milik penanya) →
+  agent yang alat baca datanya menyangkut bidang itu.
+- Dibuatkan, diajukan, diubah, dibatalkan → alat "siapkan tindakan" bidang itu.
+  Prosedur dan tindakan atas proses yang sama adalah dua kebutuhan berbeda.
+- Beberapa kebutuhan dalam satu pesan → pisahkan ke agent masing-masing, lalu
+  gabungkan. Sapaan yang disertai pertanyaan data = pertanyaan data.
+- Kalau tujuannya bisa dua-duanya (tahu prosedurnya atau mengajukannya) dan
+  riwayat tidak membantu, boleh SATU pertanyaan singkat tentang TUJUANNYA —
+  bukan tentang isi data (untuk itu Aturan Nomor Satu tetap berlaku).`;
+
+/** Tahap 3: arti status terstruktur yang ditempel penjaga ke hasil delegate_task. */
+const ATURAN_STATUS_RUTE = `
+- Hasil delegate_task bisa membawa \`status_rute\` dan \`catatan_rute\` dari
+  sistem — ikuti catatannya. "tanpa-alat": agent itu tidak memeriksa data apa
+  pun, jadi jawabannya BUKAN bukti informasinya tidak ada. "galat-model":
+  agent itu gagal menyusun jawaban — katakan permintaannya gagal diproses,
+  JANGAN katakan datanya tidak ada. "tidak-ditemukan":
+  sudah dicari dan memang tidak ada. "akses-ditolak": batas hak akses pemakai —
+  jangan mencarinya lewat agent lain.`;
 
 const TANPA_TOOL = `
 
@@ -183,6 +344,35 @@ export function maksToolLokal(): number {
 }
 
 /**
+ * Batas tool per agent untuk model di server kantor.
+ *
+ * Gemma di sana hanya menampung 8.192 token. Diukur 3 Nov 2026: Admin dengan 37
+ * tool butuh 8.374 token dan selalu ditolak. Dengan 20 tool, hasil 20 baris masih
+ * menembus batas (8.238 token); dengan 15 tool sisanya cukup. Naikkan lewat
+ * `MAKS_TOOL_SERVER` kalau batas server dinaikkan.
+ */
+export function maksToolServer(): number {
+  const n = Number(process.env.MAKS_TOOL_SERVER);
+  return Number.isInteger(n) && n > 0 ? n : 15;
+}
+
+/**
+ * Batas baris hasil alat baca untuk model di server kantor (Gemma, 8.192 token).
+ *
+ * Diukur 26 Nov 2026, akun ridho: dengan batas bawaan alat (30–100 baris),
+ * `akun_medsos`, `data_outlet`, dan `harga_cmod` membuat permintaan sesudah
+ * alat menjadi 9.000–12.000 token dan ditolak server. Menurunkan jumlah alat
+ * ke 8 hanya menolong Marketing; dua lainnya gagal karena HASIL alatnya.
+ * Naikkan lewat `MAKS_BARIS_SERVER` kalau kapasitas server dinaikkan.
+ */
+export function maksBarisServer(): number {
+  const n = Number(process.env.MAKS_BARIS_SERVER);
+  return Number.isInteger(n) && n > 0 ? n : 10;
+}
+
+// Batas tool MR AI Gateway sekarang per model: `maksToolGatewayModel()` di `models.ts` (11 Nov 2026).
+
+/**
  * Memangkas daftar tool ke `maks`, dengan URUTAN YANG DITENTUKAN.
  *
  * ⚠️ BUKAN "ambil yang pertama ketemu". Urutan kedatangan ditentukan isi tabel
@@ -230,8 +420,11 @@ export function buatAgentDariKonfig(
    * `maksToolLokal()`. `undefined` berarti tanpa batas, seperti sebelumnya.
    */
   maks?: number,
+  laporProgres?: LaporProgres,
+  /** Penjaga alur permintaan ini (Tahap 2). Tanpa penjaga, agent berperilaku seperti sebelumnya. */
+  penjaga?: PemegangPenjaga,
 ): HasilRakit {
-  const rakit = buatToolDariKonfig(k.tool, sesi, catat, catatRancangan);
+  const rakit = buatToolDariKonfig(k.tool, sesi, catat, catatRancangan, laporProgres);
   const dilewati = rakit.dilewati;
   let tool = rakit.tool;
 
@@ -244,7 +437,7 @@ export function buatAgentDariKonfig(
     for (const kode of p.dibuang) {
       dilewati.push({
         kode,
-        sebab: `dipangkas: model lokal dibatasi ${maks} tool di agent ini (setel MAKS_TOOL_LOKAL untuk mengubah)`,
+        sebab: `dipangkas: model ini dibatasi ${maks} tool per agent`,
       });
     }
   }
@@ -265,6 +458,7 @@ export function buatAgentDariKonfig(
     },
     tools: tool,
     maxSteps: MAKS_LANGKAH,
+    ...(penjaga ? { hooks: hookBawahan(penjaga) } : {}),
   });
 
   return { agent, tool, dilewati };
@@ -310,6 +504,9 @@ export async function buatRouter(
   catatRancangan?: CatatRancangan,
   /** Batas tool per agent bawahan. Diisi hanya untuk model lokal. */
   maks?: number,
+  laporProgres?: LaporProgres,
+  /** Penjaga alur permintaan ini (Tahap 2). Dibuat per permintaan oleh `siapkanAgent()`. */
+  penjaga?: PemegangPenjaga,
 ): Promise<HasilRouter | undefined> {
   const konf = await muatKonfig();
   const umum = konf.agent.find((a) => a.umum && a.aktif);
@@ -319,16 +516,28 @@ export async function buatRouter(
   const anak: Agent[] = [];
   const bawahan: HasilRouter["bawahan"] = [];
   const dilewati: HasilRouter["dilewati"] = [];
+  // Tahap 3: kemampuan per agent, dari tool yang SAMA dengan yang dipasang ke agent itu untuk pemakai ini —
+  // jadi sudah lewat penyaringan akses aplikasi, izin tool, dan pemangkasan model lokal. Tanpa query tambahan.
+  const kemampuan: AgentKemampuan[] = [];
+  const rute = ruteKemampuanDinyalakan();
 
   for (const a of konf.agent) {
     if (a.umum || !a.aktif) continue;
     const dipegang = [a.idApps, ...a.appsLain].filter(Boolean) as string[];
     if (!dipegang.some((id) => boleh.has(id))) continue;
 
-    const r = buatAgentDariKonfig(a, sesi, catat, catatRancangan, maks);
-    anak.push(r.agent);
+    const r = buatAgentDariKonfig(a, sesi, catat, catatRancangan, maks, laporProgres, penjaga);
+    // Agent tanpa tool tidak dijadikan bawahan. Dulu ia ikut ditanyai dan jawabannya
+    // "belum dipasangi sumber data" tertempel di depan jawaban agent lain (5 Nov 2026).
+    // Tetap masuk `bawahan`, supaya perute bisa menyebutnya kalau memang dia yang dimaksud.
+    if (r.tool.length > 0) anak.push(r.agent);
     // Nama tool yang BENAR-BENAR terpasang, bukan semua yang terdaftar.
-    const bisa = a.tool.filter((t) => r.tool.some((x) => x.name === namaUntukModel(t))).map((t) => t.nama);
+    const dipasang = a.tool.filter((t) => r.tool.some((x) => x.name === namaUntukModel(t)));
+    const bisa = dipasang.map((t) => t.nama);
+    if (r.tool.length > 0) {
+      kemampuan.push({ nama: a.nama, deskripsi: a.deskripsi ?? "",
+        alat: dipasang.map((t) => ({ nama: namaUntukModel(t), label: t.nama, deskripsi: t.deskripsi, jenis: kemampuanTool(t) })) });
+    }
     // ⚠️ Yang dilaporkan jumlah tool YANG TERPASANG, bukan yang terdaftar di
     // setelan. Dulu keduanya hampir sama; sejak ada pemangkasan model lokal,
     // memakai `a.tool.length` akan melaporkan 34 untuk agent yang sebenarnya
@@ -344,6 +553,7 @@ export async function buatRouter(
   // menolak "SOP apa saja yang ada?" dengan alasan tidak ada agent yang
   // menanganinya, PADAHAL `cari_sop` dan `daftar_sop` terpasang di agent
   // Portal. Router tidak bisa mengarahkan ke kemampuan yang tidak dia ketahui.
+  const registri = buatRegistri(kemampuan);
   const daftar = bawahan.length
     ? bawahan
         .map((b) => {
@@ -351,20 +561,99 @@ export async function buatRouter(
           const bisa =
             b.bisa.length > 0
               ? `\n  Bisa: ${b.bisa.join("; ")}.`
-              : `\n  Belum punya tool -- cuma bisa mengobrol.`;
-          return `- **${b.nama}** -- ${d}${bisa}`;
+              : `\n  Belum punya sumber data, jadi TIDAK bisa diteruskan. Kalau pertanyaan hanya bisa dijawab agent ini, katakan sumber datanya belum dipasang.`;
+          // Tahap 3: jenis kemampuan (dihitung dari alatnya) — satu baris pendek, bukan salinan deskripsi alat.
+          const ak = rute ? registri.agent.find((x) => x.nama === b.nama) : undefined;
+          const jenis = ak ? `\n  Jenis kemampuan: ${jenisAgent(ak).map((j) => LABEL_JENIS[j]).join("; ")}.` : "";
+          return `- **${b.nama}** -- ${d}${bisa}${jenis}`;
         })
         .join("\n")
     : "(belum ada agent aplikasi yang terbuka untuk akun ini)";
+  if (rute) penjaga?.pakaiRegistri(registri);
 
-  const agent = new Agent({
-    name: umum.nama,
-    purpose: umum.deskripsi ?? "Pintu masuk; mengarahkan ke agent aplikasi.",
-    model: ({ context }) => pilihModel(context.get(KUNCI_MODEL)),
-    instructions: () => `Kamu ${umum.nama}, pintu masuk asisten portal.
+  // Tahap 5 (F.7): jawaban sapaan / "bisa bantu apa", disusun dari agent & alat yang BENAR-BENAR terpasang
+  // untuk pemakai ini — jadi ikut berubah kalau setelan Kelola AI berubah, dan tidak menjanjikan kemampuan
+  // yang tidak ada. Dipakai penjaga saat perute mencoba mendelegasikan sapaan (RCA D.4: 19/58 diserahkan).
+  penjaga?.pakaiKemampuan(teksKemampuan(umum.nama, bawahan.filter((b) => b.jumlahTool > 0)));
+
+  // ============================================================
+  // ⚠️ ROUTER YANG BERTANYA BALIK = ROUTER YANG MENGARANG
+  // ============================================================
+  // Aturan 3 ada karena kegagalan nyata (26 Okt 2026). Ditanya "prediksi
+  // penjualan minyak zaitun", router TIDAK meneruskan ke Marketing. Ia
+  // bertanya balik minta ukuran kemasan — dan menyebutkan contohnya sendiri,
+  // "misalnya 75 ML, 175 ML, dll". Router tidak punya tool satu pun; angka
+  // itu datang dari ingatan model, bukan dari database.
+  //
+  // Yang membuatnya berbahaya: pertanyaan balik TERLIHAT seperti kehati-
+  // hatian. Tidak ada angka ramalan yang keluar, tidak ada galat, dan
+  // pemakai justru merasa dilayani dengan teliti — sambil menerima daftar
+  // varian karangan. Tool `ramal_penjualan` sendiri sudah dijaga untuk hal
+  // ini; penjagaannya tidak berguna kalau tool-nya tidak pernah dipanggil.
+  //
+  // Pola yang sama sudah menggigit di pertanyaan SOP (26 Okt 2026): router
+  // menyimpulkan sendiri bahwa tidak ada yang menangani, padahal `cari_sop`
+  // terpasang di bawahannya. Dua-duanya satu sebab — router menjawab tentang
+  // isi data yang tidak bisa ia lihat.
+  // ============================================================
+  // ⚠️ PESAN SISTEM PERUTE DIAMBIL ALIH SEPENUHNYA
+  // ============================================================
+  // VoltAgent membungkus instruksi kita di dalam <instructions> lalu
+  // MENAMBAHKAN <guidelines> bawaannya sendiri. Dua di antaranya membatalkan
+  // apa yang kita minta di sini:
+  //
+  //   "Never assume any parameter values while invoking a function."
+  //   "Always refer to the function calling schema when asking followup
+  //    questions. Prefer to ask for all the missing information at once."
+  //
+  // Panduan kedua itu MENYURUH perute bertanya balik waktu ada keterangan
+  // yang kurang — persis kegagalan yang dilaporkan 26 Okt 2026, dan persis
+  // bentuknya: ditanya "prediksi penjualan minyak zaitun", perute menanyakan
+  // varian DAN periode sekaligus ("all the missing information at once")
+  // tanpa memanggil tool apa pun.
+  //
+  // ⚠️ DUA KALI PERBAIKAN KATA-KATA GAGAL sebelum sebabnya ini ketahuan
+  // (27 Okt 2026): menambah aturan, lalu memindahkannya ke paling atas
+  // dengan contoh. Dua-duanya kalah, karena instruksi kita dan panduan
+  // bawaan ada di BLOK YANG BERBEDA dan panduan bawaan lebih spesifik.
+  //
+  // `supervisorConfig.systemMessage` mengganti seluruh pesan bawaan, panduan
+  // itu ikut hilang. Harganya: daftar bawahan dan panduan yang BERGUNA tidak
+  // lagi disisipkan otomatis, jadi dua-duanya ditulis sendiri di bawah.
+  // Kalau VoltAgent menambah panduan baru yang berguna, kita tidak akan
+  // mendapatkannya — itu konsekuensi yang diterima sadar.
+  const instruksiPerute = `Kamu ${umum.nama}, pintu masuk asisten portal.
 
 Tugasmu MENERUSKAN pertanyaan ke agent aplikasi yang tepat, bukan menjawab
 pertanyaan data sendiri. Kamu tidak punya tool data apa pun.
+
+## ATURAN NOMOR SATU: TERUSKAN DULU, JANGAN BERTANYA DULU
+
+Pertanyaan yang kurang lengkap BUKAN alasan bertanya balik. Itu justru alasan
+meneruskan — karena kamu TIDAK BISA tahu apa yang ada di dalam data, dan
+mereka bisa.
+
+Kalau pertanyaannya tentang data, panggil "delegate_task" SEKARANG dengan
+kalimat pemakai APA ADANYA. Jangan disaring, jangan dilengkapi, jangan
+diperjelas dulu.
+
+Contoh yang SALAH, dan ini pernah benar-benar terjadi:
+
+> Pemakai: "prediksi penjualan minyak zaitun"
+> Kamu: "Sebutkan nama produk yang lebih spesifik, misalnya ukuran atau
+>        variannya."
+
+Salah, karena kamu tidak tahu ukuran apa saja yang ada. ${rute
+    ? "Agent yang memegang alat ramalan punya\nalat yang mencocokkan ke daftar produk SUNGGUHAN"
+    : "Agent Marketing punya\nalat yang mencocokkan ke daftar produk SUNGGUHAN"}; dia akan memulangkan 8
+varian yang benar-benar ada, lalu BARU kamu tanyakan pemakai mau yang mana.
+
+Yang BENAR: panggil alat delegate_task dengan agent tujuan ${rute ? "yang memegang alat itu" : "Marketing"} dan tugas
+berisi kalimat pemakai apa adanya. Itu PEMANGGILAN ALAT, bukan teks jawaban —
+jangan pernah menuliskan nama alat, argumennya, atau JSON-nya sebagai jawaban.
+
+Bertanya balik hanya boleh SESUDAH agent aplikasi menjawab dan dia sendiri
+yang meminta diperjelas. Pakai daftar dari dia, apa adanya.${rute ? ATURAN_PILIH_AGENT : ""}
 
 ## Agent yang bisa kamu mintai
 
@@ -373,26 +662,111 @@ ${daftar}
 ## Aturan
 
 1. Pertanyaan tentang data — tiket, aset, cuti, program, kunjungan, order,
-   laporan — SELALU diteruskan ke agent yang memegang aplikasinya. Jangan
-   dijawab sendiri walau kamu merasa tahu jawabannya.
+   laporan, ramalan/prediksi penjualan — SELALU diteruskan ke agent yang
+   memegang aplikasinya. Jangan dijawab sendiri walau kamu merasa tahu
+   jawabannya.
 2. Pertanyaan PROSEDUR juga SELALU diteruskan: "bagaimana cara...", "apa
    syaratnya", "berapa lama prosesnya", "siapa yang menyetujui". Agent
    aplikasi punya alat pencari SOP; kamu tidak punya alat apa pun. Kamu TIDAK
    BISA tahu sebuah prosedur ada atau tidak tanpa bertanya ke mereka — jadi
    jangan menyimpulkannya sendiri.
-3. Satu pertanyaan boleh menyentuh dua aplikasi. Mintakan ke dua-duanya, lalu
+${rute
+    ? `   Kirim ke agent yang jenis kemampuannya mencakup "cari dokumen/SOP/panduan".
+   Jangan memilih agent hanya karena nama prosesnya muncul di deskripsinya:
+   memegang DATA pengajuan tidak sama dengan memegang DOKUMEN prosedurnya.`
+    : `   Khusus pertanyaan SOP, panduan, atau cara melakukan proses perusahaan,
+   utamakan Ratu AI Portal yang memegang \`cari_sop\`/\`daftar_sop\`. Jangan
+   memilih agent hanya karena nama prosesnya, misalnya kata "cuti".`}
+3. ⚠️ Lihat ATURAN NOMOR SATU di atas: nama yang belum lengkap diteruskan
+   APA ADANYA, tidak ditanyakan dulu. Menyebutkan contoh varian atau ukuran
+   dari ingatanmu berarti mengarang, dan pemakai akan mengira daftar itu
+   nyata.
+
+4. Satu pertanyaan boleh menyentuh dua aplikasi. Mintakan ke dua-duanya, lalu
    gabungkan jawabannya.
-4. Kalau tidak ada agent yang cocok, katakan terus terang aplikasi itu belum
+5. Kalau tidak ada agent yang cocok, katakan terus terang aplikasi itu belum
    punya asisten atau belum terbuka untuk akun ini, dan sarankan meminta akses
    ke administrator aplikasinya. Jangan mengarang jawaban sebagai gantinya.
    ⚠️ Aturan ini berlaku SESUDAH kamu bertanya, bukan sebagai ganti bertanya.
    Untuk pertanyaan prosedur, "tidak ada yang cocok" baru boleh disimpulkan
    kalau agent yang kamu mintai sudah menjawab bahwa dokumennya tidak ada.
-5. Sebutkan agent mana yang menjawab, supaya penanya tahu harus bertanya ke
+${rute
+    ? `   Cocokkan kemampuan dari alat yang tercantum di daftar agent, bukan dari
+   kemiripan kata. Kemampuan yang mirip tidak boleh dianggap sama. Kalau tidak
+   ada alat yang menyangkut permintaan itu, katakan kemampuan itu belum
+   tersedia; jangan mengarahkannya ke agent yang hanya memegang data berdekatan.
+   Bedakan "agent itu tidak punya alatnya" dari "datanya sudah dicari dan tidak
+   ada" — yang pertama bukan bukti datanya tidak ada.`
+    : `   Cocokkan kemampuan secara harfiah dari daftar agent. Kemampuan yang mirip
+   tidak boleh dianggap sama: pengajuan cuti/izin/sakit/dinas BUKAN pengajuan
+   lembur. Kalau daftar agent tidak menyebut lembur atau tool lembur, katakan
+   bahwa pengajuan lembur belum tersedia; jangan mengarahkannya ke Super Tools
+   hanya karena aplikasi itu memiliki data jam kerja.`}
+5a. Sapaan ("halo", "selamat pagi"), ucapan terima kasih, dan pertanyaan UMUM
+   tentang dirimu ("kamu bisa bantu apa saja?", "kamu siapa?") dijawab SENDIRI
+   dari daftar agent di atas, TANPA delegate_task. Ini satu-satunya
+   pengecualian untuk aturan meneruskan. Pertanyaan tentang ISI data atau
+   dokumen tetap diteruskan, walau bentuknya mirip: "SOP apa saja yang ada?",
+   "tiket saya apa saja?", "produk apa saja yang dijual?" butuh alat agent.
+6. Sebutkan agent mana yang menjawab, supaya penanya tahu harus bertanya ke
    mana lain kali.
-6. Jawab dalam bahasa Indonesia, ringkas.`,
+7. Jawab dalam bahasa Indonesia, ringkas.
+
+## Panduan kerja
+
+Panduan ini dulu disisipkan VoltAgent sendiri. Sejak pesan sistemnya diambil
+alih, yang berguna ditulis di sini — dan DUA yang dulu ada sengaja TIDAK
+dibawa, karena keduanya menyuruhmu bertanya balik waktu ada keterangan yang
+kurang. Untuk perute yang tidak punya tool, bertanya balik berarti menebak.
+
+- Beri jawaban akhir ke pemakai SESUDAH semua agent yang kamu mintai menjawab.
+- JANGAN meringkas jawaban agent. Sampaikan isinya apa adanya, terutama angka,
+  nama produk, dan peringatan — meringkas adalah cara paling halus menghapus
+  keterangan yang justru menentukan.
+- Kalau jawabannya sudah ada di riwayat percakapan ini, pakai lagi; jangan
+  meminta ulang ke agent yang sama.
+- Pertanyaan lanjutan yang merujuk jawaban agent sebelumnya tetap diteruskan
+  ke agent yang sama. Contoh: sesudah Marketing menjelaskan merek MRPC,
+  pertanyaan "produknya apa saja?" tetap ke Marketing, BUKAN ke Admin hanya
+  karena memuat kata "produk". Pertahankan topik dan agent dari giliran
+  sebelumnya selama user belum mengganti topik dengan jelas.
+- Jawaban pemakai yang pendek — "ya", "boleh", "setuju", "lanjut", "tidak",
+  sebuah angka, sebuah nomor pilihan, ATAU satu nama dari daftar pilihan yang
+  baru ditawarkan —
+  TERUSKAN LANGSUNG ke agent terakhir yang bertanya, dengan menyebut apa yang
+  sedang dijawab — misalnya tugas berisi tindakan yang ditawarkan beserta
+  jawaban pemakai. Sistem otomatis melampirkan pertanyaan sebelumnya dan
+  jawaban asli pemakai ke tugas itu, jadi agent bawahan tetap mendapat
+  konteksnya. Ini berlaku untuk tawaran membuat, mengubah, membatalkan,
+  menghapus, mengajukan, menyetujui, atau menolak data.
+- ⚠️ JANGAN PERNAH menyatakan persetujuan, konfirmasi, atau pilihan yang tidak
+  DITULIS pemakai pada pesan terakhirnya. Kalau agent bawahan bertanya atau
+  menawarkan sesuatu, pertanyaan itu untuk PEMAKAI — sampaikan kepadanya dan
+  berhenti. Jangan menjawabnya sendiri, jangan memilihkan, dan jangan
+  meneruskannya lagi ke agent yang sama. Sistem menolak delegasi seperti itu.
+- Persetujuan untuk MENYIAPKAN rancangan bukan persetujuan untuk MENYIMPAN.
+  Yang menyimpan hanya tombol Simpan pada kartu. Jangan pernah menulis bahwa
+  data sudah dibuat, dikirim, diajukan, atau tersimpan.
+- Agent aplikasi sudah menerima identitas akun. Kalau pemakai berkata
+  "departemen saya", teruskan frasa itu apa adanya. Jangan meminta nama
+  departemennya dan jangan menebaknya dari percakapan.
+- Jangan menuliskan proses berpikirmu sebelum atau sesudah memanggil tool.
+- Kalau hasil delegate_task berstatus "ditolak-penjaga", ikuti isi pesannya.
+  Jangan mencoba lagi dengan kata lain, kecuali pesan itu memintamu
+  meneruskan kalimat pemakai APA ADANYA${rute ? " atau meneruskan tugas yang sama ke agent di\n  `saran_agent`" : ""}.${rute ? ATURAN_STATUS_RUTE : ""}`;
+
+  const agent = new Agent({
+    name: umum.nama,
+    purpose: umum.deskripsi ?? "Pintu masuk; mengarahkan ke agent aplikasi.",
+    model: ({ context }) => pilihModel(context.get(KUNCI_MODEL)),
+    instructions: () => instruksiPerute,
     subAgents: anak,
+    // Lihat catatan panjang di atas: ini yang mematikan panduan bawaan.
+    supervisorConfig: { systemMessage: instruksiPerute, customGuidelines: [] },
     maxSteps: MAKS_LANGKAH,
+    // ⚠️ maxSteps TIDAK diturunkan. Batasnya per agent tujuan & per tugas yang sama (penjaga), jadi alur
+    // multi-agent yang sah tetap punya 12 langkah, sementara putaran ke agent yang sama berhenti di ≤3.
+    ...(penjaga ? kendaliPerute(penjaga, MAKS_LANGKAH) : {}),
   });
 
   return { agent, bawahan, dilewati };

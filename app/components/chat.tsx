@@ -2,7 +2,7 @@
 
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport } from "ai";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { MODEL_TERSEDIA, MODEL_DEFAULT, labelModel } from "@/voltagent/models";
@@ -20,7 +20,10 @@ import { KonfirmasiKeputusan, type DrafKeputusan } from "./konfirmasi-keputusan"
 import { KonfirmasiTiket, type DrafTiket } from "./konfirmasi-tiket";
 import { KonfirmasiUbahTiket, type DrafUbahTiket } from "./konfirmasi-ubah-tiket";
 import { KonfirmasiUmum, type DrafUmum } from "./konfirmasi-umum";
+import { PilihProduk, type Klarifikasi } from "./pilih-produk";
+import { bacaKlarifikasi, menyebutSemuaPilihan } from "@/lib/cocok-pilihan";
 import type { UIMessage } from "ai";
+import type { RujukanSop } from "@/voltagent/tool-konfigurasi";
 
 /**
  * Pisahkan penanda lampiran dari pertanyaan aslinya.
@@ -61,6 +64,106 @@ function ambilTeks(parts: { type: string }[]): string {
     .map((p) => p.text.trim())
     .filter((t) => t !== "")
     .join("\n\n");
+}
+
+/**
+ * Kalimat untuk jawaban yang tidak berisi teks, menurut sebabnya:
+ *  - ada galat (sambungan putus, gateway menolak): pesan galatnya tampil terpisah di bawah;
+ *  - `selesai === "tool-calls"`: agent memakai jatah langkahnya untuk memanggil alat;
+ *  - selain itu: model berhenti tanpa menulis apa pun.
+ */
+function sebabKosong(m: { metadata?: unknown }, galat?: Error): string {
+  if (galat) return "Jawaban terhenti karena terjadi galat. Keterangannya ada di bawah.";
+  const selesai = (m.metadata as { selesai?: string } | undefined)?.selesai;
+  if (selesai === "tool-calls") {
+    return "Agen memakai seluruh jatah langkahnya untuk memanggil alat sebelum sempat menulis jawaban. Coba persempit pertanyaannya, lalu kirim ulang.";
+  }
+  if (selesai === "length") {
+    return "Jawaban terpotong karena melewati batas panjang keluaran model. Coba kirim ulang atau pilih model lain.";
+  }
+  return "Model tidak menghasilkan jawaban teks. Coba kirim ulang pertanyaannya.";
+}
+
+function TabelChat({ children }: { children: ReactNode }) {
+  return (
+    <div className="tabel-chat liquid-glass-subtle my-3 overflow-hidden rounded-2xl">
+      <div className="flex items-center gap-1.5 border-b border-garis/70 px-3 py-2 text-[11px] font-medium text-tinta-lemah">
+        <svg viewBox="0 0 20 20" fill="none" className="size-3.5" aria-hidden>
+          <path d="M3 10h14M6 7l-3 3 3 3M14 7l3 3-3 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        Geser tabel untuk melihat data lainnya
+      </div>
+      <div
+        className="tabel-chat-scroll"
+        tabIndex={0}
+        role="region"
+        aria-label="Tabel data yang dapat digulir"
+      >
+        <table>{children}</table>
+      </div>
+    </div>
+  );
+}
+
+function JawabanMarkdown({ teks }: { teks: string }) {
+  // Batas ini hanya mengatur penyajian jawaban panjang, bukan aturan bisnis.
+  const perluRingkas = teks.length > 1_600 || teks.split("\n").length > 28;
+  const [dibuka, setDibuka] = useState(false);
+  const lengkap = !perluRingkas || dibuka;
+
+  return (
+    <div className="relative">
+      <div className={`prose-chat text-sm leading-relaxed ${!lengkap ? "max-h-[28rem] overflow-hidden" : ""}`}>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          components={{
+            table: ({ children }) => <TabelChat>{children}</TabelChat>,
+            a: ({ href, children }) => {
+              const anak = Array.isArray(children) ? children[0] : children;
+              const telanjang = typeof anak === "string" && anak === href;
+              return (
+                <a href={href} target="_blank" rel="noopener noreferrer" title={href} className="tautan-sumber">
+                  {telanjang && href ? ringkasUrl(href) : children}
+                </a>
+              );
+            },
+          }}
+        >
+          {rapikanJawaban(teks)}
+        </ReactMarkdown>
+      </div>
+
+      {perluRingkas && !lengkap && (
+        <div className="absolute inset-x-0 bottom-0 flex h-28 items-end justify-center bg-gradient-to-t from-kertas via-kertas/90 to-transparent pb-1">
+          <button
+            type="button"
+            onClick={() => setDibuka(true)}
+            aria-expanded="false"
+            className="liquid-glass-subtle inline-flex min-h-10 items-center gap-2 rounded-full px-4 py-2 text-xs font-semibold text-tinta transition-transform hover:scale-[1.02] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-utama active:scale-[0.98]"
+          >
+            Tampilkan jawaban lengkap
+            <svg viewBox="0 0 20 20" fill="none" className="size-4" aria-hidden>
+              <path d="m6 8 4 4 4-4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </button>
+        </div>
+      )}
+
+      {perluRingkas && lengkap && (
+        <button
+          type="button"
+          onClick={() => setDibuka(false)}
+          aria-expanded="true"
+          className="mt-3 inline-flex min-h-9 items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-tinta-lemah transition-colors hover:bg-permukaan/70 hover:text-tinta focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-utama"
+        >
+          Ringkas jawaban
+          <svg viewBox="0 0 20 20" fill="none" className="size-3.5" aria-hidden>
+            <path d="m6 12 4-4 4 4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        </button>
+      )}
+    </div>
+  );
 }
 
 /**
@@ -107,6 +210,44 @@ function ambilDrafLembur(parts: { type: string }[]): DrafLemburEntri | null {
     if (p.type !== "tool-siapkan_lembur") continue;
     const out = (p as { output?: unknown }).output as DrafLemburEntri & { status?: string };
     if (out?.status === "siap" && out.draf && out.sidik) return out;
+  }
+  return null;
+}
+
+/**
+ * Daftar "produk yang mana?" — dari METADATA lebih dulu, baru dari part tool.
+ *
+ * ⚠️ URUTANNYA SAMA DENGAN `ambilDrafTiket`, DAN SEBABNYA SAMA. Tool ramalan
+ * dan tool pasar dipegang agent PEMASARAN, bukan router. Waktu router
+ * mendelegasikan, pemanggilan tool bawahan tidak sampai ke klien — yang lewat
+ * cuma `delegate_task`. Jadi part `tool-ramal_penjualan` tidak pernah ada, dan
+ * tombolnya tidak akan pernah muncul kalau cuma dibaca dari situ.
+ *
+ * Pembacaan dari part tetap dipertahankan untuk jawaban yang TIDAK
+ * didelegasikan, dan untuk tool pasar yang dipanggil langsung.
+ */
+function ambilKlarifikasi(m: { parts: { type: string }[]; metadata?: unknown }): Klarifikasi | null {
+  const meta = m.metadata as { klarifikasi?: Klarifikasi } | undefined;
+  const k = meta?.klarifikasi;
+  if (k && Array.isArray(k.pilihan) && k.pilihan.length > 0) return k;
+
+  for (const p of m.parts) {
+    // Tool mana pun yang memulangkan bentuk ini. Dicocokkan ke BENTUK hasilnya,
+    // bukan ke daftar nama tool: tool pasar berikutnya yang ikut menanyakan
+    // produk tidak perlu didaftarkan lagi di sini.
+    if (!p.type.startsWith("tool-")) continue;
+    const out = (p as { output?: unknown }).output as
+      | { status?: string; pesan?: string; pilihan?: unknown }
+      | undefined;
+    if (out?.status !== "perlu-diperjelas") continue;
+    if (!Array.isArray(out.pilihan) || out.pilihan.length === 0) continue;
+    const pilihan = out.pilihan as { kode?: unknown; nama?: unknown }[];
+    if (!pilihan.every((x) => typeof x?.kode === "string" && typeof x?.nama === "string")) continue;
+    return {
+      pesan: out.pesan ?? "Produk mana yang Anda maksud?",
+      pilihan: pilihan as Klarifikasi["pilihan"],
+      alat: p.type.slice("tool-".length),
+    };
   }
   return null;
 }
@@ -245,6 +386,160 @@ function agentPenjawab(parts: { type: string }[]): string[] {
   return nama;
 }
 
+function inisialAgent(nama: string): string {
+  const ringkas = nama.replace(/^Ratu\s+AI\s*/i, "").trim();
+  const kata = (ringkas || "AI").split(/\s+/).filter(Boolean);
+  return kata.slice(0, 2).map((x) => x[0]).join("").toUpperCase();
+}
+
+function jejakProgres(parts: { type: string }[]): { alat: string[]; sumber: string[] } {
+  const alat: string[] = [];
+  const sumber: string[] = [];
+  for (const p of parts) {
+    if (p.type !== "data-progres") continue;
+    const data = (p as { data?: unknown }).data as { alat?: unknown; view?: unknown } | undefined;
+    if (typeof data?.alat === "string" && !alat.includes(data.alat)) alat.push(data.alat);
+    if (typeof data?.view === "string" && !sumber.includes(data.view)) sumber.push(data.view);
+  }
+  return { alat, sumber };
+}
+
+type StatusProses = {
+  judul: string;
+  detail: string;
+};
+
+function namaAlatUntukTampilan(nama: string): string {
+  return nama.replace(/^tool-/, "").replaceAll("_", " ");
+}
+
+function keteranganProsesAlat(alat: string): StatusProses {
+  const nama = namaAlatUntukTampilan(alat);
+  if (/ramal|forecast/i.test(alat)) {
+    return { judul: "Menghitung ramalan penjualan", detail: `Menjalankan ${nama} dan mengukur rentang perkiraannya.` };
+  }
+  if (/stok|stock/i.test(alat)) {
+    return { judul: "Menganalisis stok kosong", detail: `Menjalankan ${nama} pada laporan outlet.` };
+  }
+  if (/sop|dokumen|knowledge/i.test(alat)) {
+    return { judul: "Mencari dokumen yang relevan", detail: `Menjalankan ${nama} pada basis pengetahuan.` };
+  }
+  if (/pasar|pesaing|tren/i.test(alat)) {
+    return { judul: "Menganalisis data pasar", detail: `Menjalankan ${nama} dan membandingkan hasilnya.` };
+  }
+  return { judul: "Menjalankan query database", detail: `Mengambil data yang diperlukan melalui ${nama}.` };
+}
+
+function agentDalamProses(messages: UIMessage[]): string[] {
+  const pesan = [...messages].reverse().find((m) => m.role === "assistant");
+  if (!pesan) return [];
+
+  for (const p of [...pesan.parts].reverse()) {
+    if (p.type !== "tool-delegate_task") continue;
+    const bagian = p as { input?: unknown; output?: unknown };
+    const input = bagian.input as { targetAgents?: unknown } | undefined;
+    const tujuan = Array.isArray(input?.targetAgents)
+      ? input.targetAgents.filter((x): x is string => typeof x === "string")
+      : [];
+    const hasil = Array.isArray(bagian.output)
+      ? (bagian.output as { agentName?: unknown }[])
+          .map((x) => x.agentName)
+          .filter((x): x is string => typeof x === "string")
+      : [];
+    return [...new Set([...tujuan, ...hasil])];
+  }
+  return [];
+}
+
+/**
+ * Status yang terlihat selama stream berlangsung.
+ *
+ * Sumbernya adalah part stream yang benar-benar sedang dikerjakan. Khusus
+ * agent bawahan, `delegate_task.input.targetAgents` sudah tersedia sebelum
+ * agent selesai menjawab, sehingga nama agent dapat ditampilkan tanpa
+ * menebak isi pertanyaan user.
+ */
+function statusProses(messages: UIMessage[], status: string): StatusProses {
+  const pesan = [...messages].reverse().find((m) => m.role === "assistant");
+  const parts = pesan?.parts ?? [];
+  const progresTerakhir = [...parts].reverse().find((p) => p.type === "data-progres") as
+    | { data?: { alat?: unknown; tahap?: unknown } }
+    | undefined;
+  if (
+    progresTerakhir?.data?.tahap === "mulai" &&
+    typeof progresTerakhir.data.alat === "string"
+  ) {
+    return keteranganProsesAlat(progresTerakhir.data.alat);
+  }
+  const adaTeks = parts.some(
+    (p) => p.type === "text" && typeof p.text === "string" && p.text.trim() !== "",
+  );
+
+  if (adaTeks) {
+    return {
+      judul: "Menyusun jawaban",
+      detail: "Jawaban sedang ditulis berdasarkan hasil yang sudah diperoleh.",
+    };
+  }
+
+  for (const p of [...parts].reverse()) {
+    if (!p.type.startsWith("tool-")) continue;
+    const bagian = p as {
+      type: string;
+      state?: string;
+      input?: unknown;
+      output?: unknown;
+    };
+
+    if (bagian.type === "tool-delegate_task") {
+      const input = bagian.input as { targetAgents?: unknown } | undefined;
+      const tujuan = Array.isArray(input?.targetAgents)
+        ? input.targetAgents.filter((x): x is string => typeof x === "string")
+        : [];
+      const hasil = Array.isArray(bagian.output)
+        ? (bagian.output as { agentName?: unknown }[])
+            .map((x) => x.agentName)
+            .filter((x): x is string => typeof x === "string")
+        : [];
+      const agen = [...new Set([...tujuan, ...hasil])];
+      const nama = agen.length > 0 ? agen.join(" dan ") : "agen AI yang sesuai";
+
+      if (bagian.state === "output-available") {
+        return {
+          judul: `Menerima hasil dari ${nama}`,
+          detail: "Hasil dari agen AI sedang diolah menjadi jawaban untuk Anda.",
+        };
+      }
+      return {
+        judul: `Dikerjakan oleh ${nama}`,
+        detail: "Agen AI sedang memahami pertanyaan dan mengambil data yang diperlukan.",
+      };
+    }
+
+    const alat = namaAlatUntukTampilan(bagian.type);
+    if (bagian.state === "output-available") {
+      return {
+        judul: `Mengolah hasil ${alat}`,
+        detail: "Data sudah diterima dan sedang diperiksa.",
+      };
+    }
+    return {
+      judul: `Mengambil data dengan ${alat}`,
+      detail: "Permintaan data sedang diproses.",
+    };
+  }
+
+  return status === "submitted"
+    ? {
+        judul: "Mengarahkan pertanyaan",
+        detail: "Memilih agen AI yang paling sesuai untuk menjawab.",
+      }
+    : {
+        judul: "Memproses pertanyaan",
+        detail: "Menyiapkan langkah berikutnya.",
+      };
+}
+
 function hitungDokumen(parts: { type: string }[]): number {
   return parts.filter((p) => p.type === "tool-baca_dokumen").length;
 }
@@ -267,6 +562,17 @@ function hitungDokumen(parts: { type: string }[]): number {
  */
 function hitungKb(parts: { type: string }[]): number {
   return parts.filter((p) => p.type === "tool-cari_sop" || p.type === "tool-daftar_sop").length;
+}
+
+function pesanGalatRamah(error: Error): string {
+  const mentah = error.message.trim();
+  try {
+    const parsed = JSON.parse(mentah) as { error?: unknown };
+    if (typeof parsed?.error === "string") return parsed.error;
+  } catch {
+    // Pesan biasa memang bukan JSON; tampilkan apa adanya.
+  }
+  return mentah;
 }
 
 /**
@@ -331,15 +637,45 @@ function ringkasUrl(href: string): string {
   return `${u.host}/${awal ? `${awal}/` : ""}${ekor.slice(0, 8)}…`;
 }
 
-function dokumenSop(parts: { type: string }[]): string[] {
-  const kode = new Set<string>();
+function dokumenSop(parts: { type: string }[]): RujukanSop[] {
+  const daftar: RujukanSop[] = [];
   for (const p of parts) {
     if (p.type !== "tool-cari_sop") continue;
     const keluaran = (p as { output?: unknown }).output;
     if (typeof keluaran !== "string") continue;
-    for (const m of keluaran.matchAll(/\b(SOP-[A-Z0-9]+-\d+)\b/g)) kode.add(m[1]);
+    let terakhir: RujukanSop | undefined;
+    for (const baris of keluaran.split("\n")) {
+      const kepala = baris.match(/^\d+\.\s+(.+?)(?:\s+-\s+bagian\s+"([^"]+)")?(?:\s+-\s+halaman\s+\d+.*)?$/);
+      if (kepala) {
+        terakhir = {
+          judul: kepala[1].trim(),
+          ...(kepala[2] ? { bagian: kepala[2].trim() } : {}),
+        };
+        daftar.push(terakhir);
+        continue;
+      }
+      const tautan = baris.match(/^\s+tautan:\s+(\S+)\s*$/);
+      if (tautan && terakhir && /^https?:\/\//i.test(tautan[1])) terakhir.url = tautan[1];
+    }
   }
-  return [...kode];
+  const unik = new Map<string, RujukanSop>();
+  for (const r of daftar) unik.set(`${r.judul}\u0000${r.bagian ?? ""}`, r);
+  return [...unik.values()];
+}
+
+function bacaRujukanSop(mentah: string | null): RujukanSop[] {
+  if (!mentah) return [];
+  try {
+    const parsed = JSON.parse(mentah) as unknown;
+    if (Array.isArray(parsed)) {
+      return parsed.filter((x): x is RujukanSop =>
+        typeof x === "object" && x !== null && typeof (x as RujukanSop).judul === "string",
+      );
+    }
+  } catch {
+    // Percakapan lama menyimpan kode SOP dengan pemisah koma.
+  }
+  return mentah.split(",").filter(Boolean).map((kode) => ({ judul: kode.trim() }));
 }
 
 function ambilSql(parts: { type: string }[]): string[] {
@@ -375,7 +711,7 @@ type Info = {
    */
   alat: string[];
   /** Kode dokumen SOP yang dikembalikan tool, untuk tombol unduh. */
-  sop: string[];
+  sop: RujukanSop[];
   /** SQL lengkapnya, untuk user yang mau memeriksa sendiri. */
   sql: string[];
 };
@@ -459,8 +795,13 @@ export function Chat({
         sumber?: string[];
         /** Kode alat yang benar-benar dipanggil. Sumbernya sama: metadata. */
         alat?: string[];
+        /** Daftar pilihan produk, ikut disimpan supaya tombolnya tidak hilang. */
+        klarifikasi?: Klarifikasi;
+        /** Rujukan SOP terstruktur dari alat agen bawahan. */
+        sop?: RujukanSop[];
       };
       const token = meta?.token ?? null;
+      const progres = jejakProgres(message.parts);
 
       // ⚠️ Sumber jalur konfigurasi TIDAK bisa diurai dari SQL seperti jalur
       // lama: model tidak menulis SQL, dan tool agent bawahan tidak sampai ke
@@ -468,7 +809,9 @@ export function Chat({
       // ini, jawaban yang jelas membaca database akan berlabel "tidak
       // mengambil data dari database" — kesalahan yang sudah terjadi tiga kali
       // di berkas ini.
-      const semuaSumber = [...new Set([...sumber, ...(meta?.sumber ?? [])])];
+      const semuaSumber = [...new Set([...sumber, ...(meta?.sumber ?? []), ...progres.sumber])];
+      const semuaAlat = [...new Set([...(meta?.alat ?? []), ...progres.alat])];
+      const semuaSop = meta?.sop?.length ? meta.sop : dokumenSop(message.parts);
       const agent = agentPenjawab(message.parts);
 
       setInfo((s) => ({
@@ -479,13 +822,21 @@ export function Chat({
           query: sql.length,
           token,
           sumber: semuaSumber,
-          alat: meta?.alat ?? [],
+          alat: semuaAlat,
           agent,
           sql,
           dokumen: hitungDokumen(message.parts),
-          kb: hitungKb(message.parts),
-          tiket: hitungTiket(message.parts),
-          sop: dokumenSop(message.parts),
+          kb:
+            Math.max(
+              hitungKb(message.parts),
+              semuaAlat.filter((a) => a === "cari_sop" || a === "daftar_sop").length,
+            ),
+          tiket:
+            Math.max(
+              hitungTiket(message.parts),
+              semuaAlat.filter((a) => a === "cari_tiket_serupa").length,
+            ),
+          sop: semuaSop,
         },
       }));
 
@@ -536,9 +887,18 @@ export function Chat({
             // Rujukan sumber ikut disimpan, kalau tidak percakapan yang
             // dimuat ulang kehilangan label DAN tombol PDF-nya.
             jumlahDokumen: hitungDokumen(message.parts),
-            jumlahKb: hitungKb(message.parts),
-            jumlahTiket: hitungTiket(message.parts),
-            sopDipakai: dokumenSop(message.parts).join(","),
+            jumlahKb:
+              Math.max(
+                hitungKb(message.parts),
+                semuaAlat.filter((a) => a === "cari_sop" || a === "daftar_sop").length,
+              ),
+            jumlahTiket:
+              Math.max(
+                hitungTiket(message.parts),
+                semuaAlat.filter((a) => a === "cari_tiket_serupa").length,
+              ),
+            sopDipakai: JSON.stringify(semuaSop),
+            klarifikasi: meta?.klarifikasi ?? null,
             sumber: semuaSumber.join(", "),
             // Beberapa query dipisah baris kosong supaya bisa dipecah lagi
             // saat percakapan dibuka ulang.
@@ -553,12 +913,31 @@ export function Chat({
   });
 
   const sibuk = status === "submitted" || status === "streaming";
+  const proses = statusProses(messages, status);
+  const kunciAgentProses = (sibuk ? agentDalamProses(messages) : []).join("\u0000");
   const bawah = useRef<HTMLDivElement>(null);
   const kolom = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    muatDaftar();
-  }, [muatDaftar]);
+    const pengendali = new AbortController();
+
+    void fetch("/api/percakapan", { signal: pengendali.signal })
+      .then(async (r) => {
+        if (r.ok) setDaftar(await r.json());
+      })
+      .catch(() => {
+        // Daftar gagal dimuat bukan alasan untuk memblokir chat.
+      });
+
+    return () => pengendali.abort();
+  }, []);
+
+  // Rail agent berada di komponen saudara. Event browser menjaga keduanya
+  // tetap sinkron tanpa memindahkan seluruh halaman server menjadi client.
+  useEffect(() => {
+    const nama = kunciAgentProses ? kunciAgentProses.split("\u0000") : [];
+    window.dispatchEvent(new CustomEvent("agent-proses", { detail: { nama } }));
+  }, [kunciAgentProses]);
 
   useEffect(() => {
     // "auto" saat memuat percakapan lama -- kalau "smooth", layar terlihat
@@ -597,6 +976,7 @@ export function Chat({
           sumber: string | null; sql_dipakai: string | null;
           jumlah_dokumen: number | null; jumlah_kb: number | null;
           jumlah_tiket: number | null; sop_dipakai: string | null;
+          klarifikasi: string | null;
         }[];
       };
 
@@ -628,15 +1008,18 @@ export function Chat({
             dokumen: p.jumlah_dokumen ?? 0,
             kb: p.jumlah_kb ?? 0,
             tiket: p.jumlah_tiket ?? 0,
-            sop: p.sop_dipakai ? p.sop_dipakai.split(",").filter(Boolean) : [],
+            sop: bacaRujukanSop(p.sop_dipakai),
             // Dipisah baris kosong waktu disimpan.
             sql: p.sql_dipakai ? p.sql_dipakai.split("\n\n") : [],
           };
         }
+        // Tanpa metadata ini, tombol pilih produk hilang begitu pindah percakapan.
+        const pilihan = bacaKlarifikasi(p.klarifikasi);
         return {
           id: idPesan,
           role: p.peran,
           parts: [{ type: "text", text: p.teks }],
+          ...(pilihan ? { metadata: { klarifikasi: pilihan } } : {}),
         } as UIMessage;
       });
 
@@ -665,7 +1048,7 @@ export function Chat({
     setGalatUnggah("");
     setUnggahan(berkas.name);
     try {
-      const judul = window.prompt("Judul dokumen pengetahuan ini apa?\nJudul akan dipakai agent saat mencari dokumen.", berkas.name.replace(/\.[^.]+$/, ""))?.trim();
+      const judul = window.prompt("Apa judul dokumen pengetahuan ini?\nJudul akan dipakai agen AI saat mencari dokumen.", berkas.name.replace(/\.[^.]+$/, ""))?.trim();
       if (!judul) {
         setGalatUnggah("Unggah dibatalkan karena judul belum diisi.");
         return;
@@ -679,7 +1062,7 @@ export function Chat({
         setGalatUnggah(d.error || "Gagal mengunggah dokumen.");
         return;
       }
-      setGalatUnggah(`Dokumen pengetahuan “${d.judul}” tersimpan dan siap dicari agent (${d.jumlahPotongan} potongan).`);
+      setGalatUnggah(`Dokumen pengetahuan “${d.judul}” tersimpan dan siap dicari agen AI (${d.jumlahPotongan} potongan).`);
     } catch {
       setGalatUnggah("Tidak bisa menghubungi server.");
     } finally {
@@ -688,11 +1071,20 @@ export function Chat({
     }
   }
 
-  async function kirim(e: React.FormEvent) {
-    e.preventDefault();
-    const teks = input.trim();
-    if (!teks || sibuk) return;
-
+  /**
+   * Mengirim satu pertanyaan, dari kolom isian MAUPUN dari tombol.
+   *
+   * ⚠️ DIPISAH DARI `kirim()` supaya tombol pilihan produk menempuh jalur yang
+   * SAMA PERSIS: percakapan dibuat kalau belum ada, `mulai`/`modelTerkirim`
+   * diisi, daftar percakapan disegarkan. Jalur kedua yang ditulis terpisah
+   * akan kehilangan salah satunya dan baru terlihat waktu ada yang bingung
+   * kenapa jawaban tertentu tidak tercatat lamanya.
+   *
+   * `pakaiLampiran` false untuk tombol: dokumen yang sedang disiapkan user
+   * menunggu pertanyaannya sendiri, dan ikut terkirim berarti ia habis dipakai
+   * untuk pertanyaan yang bukan miliknya.
+   */
+  async function kirimTeks(teks: string, pakaiLampiran: boolean): Promise<boolean> {
     // Percakapan baru dibuat lebih dulu supaya id-nya sudah ada saat
     // pesan pertama dikirim -- kalau tidak, pesan itu tidak punya tempat.
     let id = idAktif.current;
@@ -707,9 +1099,11 @@ export function Chat({
           id = (await r.json()).id as number;
           idAktif.current = id;
           setAktif(id);
+        } else {
+          return false;
         }
       } catch {
-        // Kalau gagal, chat tetap jalan -- cuma tidak tersimpan.
+        return false;
       }
     }
 
@@ -721,17 +1115,41 @@ export function Chat({
     // Tanpa ini model tidak punya alasan memanggil `baca_dokumen` -- dia tidak
     // tahu ada dokumen yang menunggu. Yang dikirim cuma NAMANYA; isinya tetap
     // diambil lewat tool, supaya PDF panjang tidak membengkakkan tiap pesan.
-    const catatan = lampiran.length
+    const catatan = pakaiLampiran && lampiran.length
       ? `
 
 [Dokumen terlampir: ${lampiran.map((d) => d.nama).join(", ")}]`
       : "";
 
     sendMessage({ text: teks + catatan }, { body: { model, percakapanId: id } });
-    setInput("");
-    setLampiran([]);
+    if (pakaiLampiran) setLampiran([]);
     muatDaftar();
+    return true;
   }
+
+  async function kirim(e: React.FormEvent) {
+    e.preventDefault();
+    const teks = input.trim();
+    if (!teks || sibuk) return;
+    const terkirim = await kirimTeks(teks, true);
+    if (terkirim) setInput("");
+  }
+
+  /**
+   * Daftar pilihan untuk jawaban yang menyalin daftar lama dari riwayat.
+   *
+   * ⚠️ Yang dipakai daftar TERAKHIR dari alat, bukan nama yang ditulis model,
+   * jadi tombolnya tetap hanya berisi produk yang benar-benar ada di katalog.
+   */
+  const klarifikasiDariRiwayat = (i: number): Klarifikasi | null => {
+    for (let k = i - 1; k >= 0; k--) {
+      const lama = messages[k].role === "assistant" ? ambilKlarifikasi(messages[k]) : null;
+      if (!lama) continue;
+      const cocok = menyebutSemuaPilihan(ambilTeks(messages[i].parts), lama.pilihan.map((p) => p.nama));
+      return cocok ? lama : null;
+    }
+    return null;
+  };
 
   /**
    * Kalimat user tepat sebelum jawaban ke-`i`. Ikut disimpan di jejak audit
@@ -771,8 +1189,8 @@ export function Chat({
               </h2>
               <p className="mt-1.5 text-sm text-tinta-lemah">
                 {agent
-                  ? "Agent Umum menjawab langsung, atau meneruskan ke agent aplikasi."
-                  : "Tanya apa saja soal data departemen kamu."}
+                  ? "Ratu AI menjawab langsung atau meneruskan pertanyaan ke agen AI aplikasi."
+                  : "Tanyakan apa saja tentang data departemen Anda."}
               </p>
 
               {/* Aplikasi yang terkunci TETAP ditampilkan -- menyembunyikannya
@@ -785,7 +1203,7 @@ export function Chat({
                       key={a.nama}
                       title={
                         a.terbuka
-                          ? `${a.jumlahTool} tool`
+                          ? `${a.jumlahTool} kemampuan`
                           : "Perlu akses — minta ke admin aplikasinya"
                       }
                       className={
@@ -795,7 +1213,7 @@ export function Chat({
                       }
                     >
                       {a.nama.replace(/^Ratu\s+AI\s*/i, "")}
-                      {a.terbuka && a.jumlahTool === 0 && " · belum ada tool"}
+                      {a.terbuka && a.jumlahTool === 0 && " · belum ada kemampuan"}
                       {!a.terbuka && " · terkunci"}
                     </span>
                   ))}
@@ -870,23 +1288,42 @@ export function Chat({
             // Jawaban agent: TANPA gelembung, cukup avatar + teks selebar kolom.
             // Jawaban di sini sering berisi tabel panjang; dibungkus gelembung
             // justru jadi sempit dan sulit dibaca.
+            const penjawab = ini?.agent?.length ? ini.agent : agentPenjawab(m.parts);
+            const namaPenjawab = penjawab.length > 0 ? penjawab.join(" + ") : "Ratu AI";
+
             return (
               <div key={m.id} className="muncul flex gap-3">
-                <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-xl bg-utama text-[10px] font-semibold text-utama-teks">
-                  AI
+                <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-xl bg-utama text-[10px] font-bold text-utama-teks shadow-kecil" aria-hidden>
+                  {inisialAgent(namaPenjawab)}
                 </span>
                 <div className="min-w-0 flex-1">
-                  {teks.trim() === "" ? (
-                    // Agent memanggil tool sampai jatah langkahnya habis tanpa
-                    // sempat menulis jawaban. Tanpa pesan ini, user cuma melihat
-                    // ruang kosong dan mengira aplikasinya rusak.
+                  <div className="liquid-glass-subtle mb-2.5 inline-flex max-w-full items-center gap-2 rounded-xl px-2.5 py-1.5">
+                    <span className="size-1.5 shrink-0 rounded-full bg-aksen ring-2 ring-aksen/25" aria-hidden />
+                    <span className="min-w-0">
+                      <strong className="block truncate text-xs font-semibold text-tinta">{namaPenjawab}</strong>
+                      <span className="block text-[11px] leading-tight text-tinta-lemah">
+                        {penjawab.length > 0 ? "Agen AI yang menangani jawaban ini" : "Ratu AI"}
+                      </span>
+                    </span>
+                  </div>
+
+                  {teks.trim() === "" && sibuk && i === messages.length - 1 ? (
+                    // Masih dikerjakan: teks memang belum ada. Kartu status di bawah yang
+                    // menjelaskan prosesnya. Tanpa syarat ini, kalimat "tidak menghasilkan
+                    // jawaban" tampil di tengah proses (11 Nov 2026).
+                    null
+                  ) : teks.trim() === "" ? (
+                    // Jawaban kosong punya tiga sebab berbeda, dan dulu ketiganya tampil
+                    // sebagai "terlalu banyak langkah" (11 Nov 2026): sambungan yang putus
+                    // pun disuruh "sebutkan satu produk", padahal pertanyaannya soal tiket.
                     <p className="text-sm text-tinta-lemah">
-                      Pertanyaannya perlu terlalu banyak langkah, jadi terpotong sebelum
-                      selesai. Coba persempit &mdash; misalnya sebutkan satu produk atau satu bulan.
+                      {sebabKosong(m, error && i === messages.length - 1 ? error : undefined)}
                     </p>
                   ) : (
                     // remark-gfm untuk dukungan tabel hasil query.
-                    <div className="prose-chat text-sm leading-relaxed">
+                    <>
+                      <JawabanMarkdown teks={teks} />
+                      {false && <div className="prose-chat text-sm leading-relaxed">
                       {/* ⚠️ TAUTAN HARUS BUKA DI TAB BARU.
                           Tanpa `target="_blank"`, mengklik tautan sumber
                           membawa SELURUH halaman keluar dari chat. Dan karena
@@ -898,6 +1335,7 @@ export function Chat({
                       <ReactMarkdown
                         remarkPlugins={[remarkGfm]}
                         components={{
+                          table: ({ children }) => <TabelChat>{children}</TabelChat>,
                           a: ({ href, children }) => {
                             // Tautan "telanjang": teksnya sama dengan
                             // alamatnya, hasil autolink remark-gfm. Cuma yang
@@ -928,7 +1366,8 @@ export function Chat({
                             dan yang di database tetap kata-kata asli model. */}
                         {rapikanJawaban(teks)}
                       </ReactMarkdown>
-                    </div>
+                      </div>}
+                    </>
                   )}
 
                   {/* Kartu konfirmasi. Tombolnya yang menyimpan -- model
@@ -997,6 +1436,24 @@ export function Chat({
                     ) : null;
                   })()}
 
+                  {/* Daftar varian produk sebagai tombol. Yang dikirim nama
+                      dari DAFTAR, bukan ketikan ulang -- nama di katalog
+                      panjang dan penuh singkatan, dan satu huruf salah berarti
+                      pertanyaannya terulang. */}
+                  {m.role === "assistant" && (() => {
+                    const tanya = ambilKlarifikasi(m) ?? klarifikasiDariRiwayat(i);
+                    return tanya ? (
+                      <PilihProduk
+                        data={tanya}
+                        jawabanBerikut={
+                          messages[i + 1]?.role === "user" ? ambilTeks(messages[i + 1].parts) : undefined
+                        }
+                        kirim={(t) => void kirimTeks(t, false)}
+                        nonaktif={sibuk}
+                      />
+                    ) : null;
+                  })()}
+
                   {ini && (
                     <SumberJawaban
                       model={labelModel(ini.model)}
@@ -1024,17 +1481,26 @@ export function Chat({
               <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-xl bg-utama text-[10px] font-semibold text-utama-teks">
                 AI
               </span>
-              <span className="flex items-center gap-1.5 pt-1.5">
-                <span className="size-1.5 animate-bounce rounded-full bg-utama/60 [animation-delay:-0.3s]" />
-                <span className="size-1.5 animate-bounce rounded-full bg-utama/60 [animation-delay:-0.15s]" />
-                <span className="size-1.5 animate-bounce rounded-full bg-utama/60" />
-              </span>
+              <div
+                className="proses-aktif max-w-md rounded-2xl bg-permukaan px-3.5 py-2.5 shadow-kecil ring-1 ring-garis/70"
+                role="status"
+                aria-live="polite"
+              >
+                <div className="flex items-center gap-2 text-sm font-medium text-teks">
+                  <span className="relative flex size-2 shrink-0">
+                    <span className="absolute inline-flex size-full animate-ping rounded-full bg-utama opacity-40" />
+                    <span className="relative inline-flex size-2 rounded-full bg-utama" />
+                  </span>
+                  {proses.judul}
+                </div>
+                <p className="mt-0.5 pl-4 text-xs leading-5 text-teks-redup">{proses.detail}</p>
+              </div>
             </div>
           )}
 
           {error && (
             <p className="rounded-2xl bg-bahaya-lemah px-4 py-3 text-sm text-bahaya ring-1 ring-bahaya/20">
-              Gagal: {error.message}
+              Gagal: {pesanGalatRamah(error)}
             </p>
           )}
 
@@ -1042,7 +1508,10 @@ export function Chat({
           </div>
         </div>
 
-        <div className="shrink-0 px-4 pb-4">
+        {/* `relative z-20`: komposer memakai backdrop-blur, yang membuat lapisannya sendiri di
+            tingkat dasar. Tanpa z-index, sel tabel jawaban yang menempel (z 1-3) tergambar DI ATAS
+            menu pilih model (11 Nov 2026). */}
+        <div className="relative z-20 shrink-0 px-4 pb-4">
           <form
             onSubmit={kirim}
             // Komposer "mengambang": kartu dengan bayangan, bukan kotak bergaris

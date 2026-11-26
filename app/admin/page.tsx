@@ -47,7 +47,7 @@ export default function Admin() {
     try {
       const r = await fetch("/api/admin/pendaftaran");
       if (!r.ok) {
-        setGalat(r.status === 404 ? "Kamu tidak punya akses ke halaman ini." : "Gagal memuat.");
+        setGalat(r.status === 404 ? "Anda tidak memiliki akses ke halaman ini." : "Gagal memuat.");
         return;
       }
       const d = await r.json();
@@ -113,8 +113,8 @@ export default function Admin() {
           <h1 className="text-xl font-semibold tracking-tight">Pengajuan akun</h1>
           <p className="mt-1 text-sm text-tinta-lemah">
             {cakupan
-              ? `Kamu menentukan perannya. Terbatas ke departemen ${cakupan}.`
-              : "Kamu yang menentukan departemen & perannya, bukan pendaftar."}
+              ? `Anda menentukan perannya. Akses terbatas ke departemen ${cakupan}.`
+              : "Anda menentukan departemen dan perannya, bukan pendaftar."}
           </p>
         </div>
         <nav className="flex shrink-0 items-center gap-4 text-sm text-tinta-lemah">

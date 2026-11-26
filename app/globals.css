@@ -234,6 +234,142 @@ body {
   animation: muncul 0.25s ease-out;
 }
 
+/* Liquid glass dipakai hanya untuk lapisan detail yang muncul di atas konten.
+   Blur dan highlight membantu panel terbaca sebagai lapisan tanpa membuat
+   seluruh task UI menjadi transparan. */
+.liquid-glass {
+  background:
+    linear-gradient(135deg, color-mix(in srgb, var(--permukaan) 88%, transparent), color-mix(in srgb, var(--permukaan) 62%, transparent));
+  border: 1px solid color-mix(in srgb, var(--permukaan) 72%, var(--garis));
+  box-shadow:
+    inset 0 1px 0 color-mix(in srgb, white 58%, transparent),
+    0 12px 32px color-mix(in srgb, var(--tinta) 10%, transparent);
+  backdrop-filter: blur(18px) saturate(135%);
+  -webkit-backdrop-filter: blur(18px) saturate(135%);
+}
+
+/* Varian ringan untuk identitas yang berulang pada setiap jawaban. Tidak
+   memakai bayangan besar agar kepala jawaban tidak bersaing dengan isinya. */
+.liquid-glass-subtle {
+  background: color-mix(in srgb, var(--permukaan) 68%, transparent);
+  border: 1px solid color-mix(in srgb, var(--permukaan) 70%, var(--garis));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, white 42%, transparent);
+  backdrop-filter: blur(12px) saturate(125%);
+  -webkit-backdrop-filter: blur(12px) saturate(125%);
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .liquid-glass {
+    background: var(--permukaan);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+
+  .liquid-glass-subtle {
+    background: var(--permukaan);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+/* Kartu status saat agent masih bekerja. Gerak dibuat kecil agar status tetap
+   nyaman dibaca, tetapi cukup jelas untuk menunjukkan proses belum berhenti. */
+@keyframes napas-proses {
+  0%, 100% {
+    box-shadow: 0 1px 3px color-mix(in srgb, var(--tinta) 7%, transparent);
+  }
+  50% {
+    box-shadow: 0 5px 16px color-mix(in srgb, var(--utama) 14%, transparent);
+  }
+}
+
+@keyframes jalan-proses {
+  from { transform: translateX(-130%); }
+  to { transform: translateX(330%); }
+}
+
+.proses-aktif {
+  position: relative;
+  overflow: hidden;
+  animation: napas-proses 2.2s ease-in-out infinite;
+}
+
+.proses-aktif::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  width: 34%;
+  border-radius: 9999px;
+  background: linear-gradient(90deg, transparent, var(--utama), transparent);
+  animation: jalan-proses 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .proses-aktif,
+  .proses-aktif::after {
+    animation: none;
+  }
+}
+
+@keyframes agent-menjawab {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 color-mix(in srgb, var(--aksen) 45%, transparent);
+  }
+  50% {
+    transform: scale(1.06);
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--aksen) 0%, transparent);
+  }
+}
+
+@keyframes label-agent-masuk {
+  from {
+    opacity: 0;
+    transform: translate(-5px, -50%) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: translate(0, -50%) scale(1);
+  }
+}
+
+.agent-sedang-menjawab {
+  outline: 2px solid var(--aksen);
+  outline-offset: 2px;
+  animation: agent-menjawab 1.5s ease-in-out infinite;
+}
+
+.label-agent-aktif {
+  position: absolute;
+  left: calc(100% + 0.75rem);
+  top: 50%;
+  display: flex;
+  width: max-content;
+  align-items: center;
+  gap: 0.4rem;
+  transform: translateY(-50%);
+  border: 1px solid var(--garis);
+  border-radius: 9999px;
+  background: var(--permukaan);
+  padding: 0.4rem 0.65rem;
+  color: var(--tinta);
+  font-size: 0.7rem;
+  font-weight: 600;
+  box-shadow: 0 5px 16px color-mix(in srgb, var(--tinta) 12%, transparent);
+  pointer-events: none;
+  animation: label-agent-masuk 0.25s ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .agent-sedang-menjawab,
+  .label-agent-aktif {
+    animation: none;
+  }
+}
+
 /* ---------------------------------------------------------------
    Gaya isi jawaban agent (hasil render markdown).
    Ditulis manual, bukan pakai @tailwindcss/typography, supaya tidak
@@ -284,26 +420,73 @@ body {
   font-weight: 600;
 }
 
-/* Tabel hasil query -- bisa lebih lebar dari bubble, jadi boleh discroll. */
+/* Tabel hasil query berada dalam TabelChat. Area gulir dibatasi tingginya agar
+   puluhan baris tidak menenggelamkan jawaban dan fokus keyboard dapat masuk. */
+.prose-chat .tabel-chat-scroll {
+  max-height: min(32rem, 62vh);
+  overflow: auto;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+}
+
+.prose-chat .tabel-chat-scroll:focus-visible {
+  outline: 2px solid var(--utama);
+  outline-offset: -2px;
+}
+
 .prose-chat table {
-  display: block;
   width: max-content;
-  max-width: 100%;
-  overflow-x: auto;
-  border-collapse: collapse;
-  margin: 0.5rem 0;
+  min-width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 0;
   font-size: 0.8125rem;
 }
 .prose-chat th,
 .prose-chat td {
-  border: 1px solid var(--garis);
-  padding: 0.25rem 0.5rem;
+  min-width: 7.5rem;
+  max-width: 18rem;
+  border-right: 1px solid var(--garis);
+  border-bottom: 1px solid var(--garis);
+  padding: 0.5rem 0.625rem;
   text-align: left;
-  white-space: nowrap;
+  vertical-align: top;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  /* Latar sel HARUS pekat: header dan kolom pertama menempel waktu digulir, dan latar tembus
+     pandang membuat baris di belakangnya terbaca bertumpuk ("Jabatan" di atas "IT Helpdesk
+     Lead", 11 Nov 2026). Warnanya dicampur ke --permukaan, bukan ke transparent. */
+  background: var(--permukaan);
 }
 .prose-chat th {
-  background: color-mix(in srgb, var(--utama) 14%, transparent);
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: color-mix(in srgb, var(--utama) 14%, var(--permukaan));
   font-weight: 600;
+}
+
+.prose-chat th:first-child,
+.prose-chat td:first-child {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  min-width: 10rem;
+  box-shadow: 1px 0 0 var(--garis);
+}
+
+.prose-chat th:first-child {
+  z-index: 3;
+  background: color-mix(in srgb, var(--utama) 20%, var(--permukaan));
+}
+
+.prose-chat tr:last-child td {
+  border-bottom: 0;
+}
+
+.prose-chat th:last-child,
+.prose-chat td:last-child {
+  border-right: 0;
 }
 
 .prose-chat code {

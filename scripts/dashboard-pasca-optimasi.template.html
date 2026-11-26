@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ratu AI — Pasca-Optimasi</title>
+<script>try{var t=localStorage.getItem('tema-dashboard');if(t==='dark'||t==='light')document.documentElement.dataset.theme=t}catch(e){}</script>
+<style>
+/*__STYLE__*/
+.bar-lama{fill:var(--ink3);opacity:.55}.bar-baru{fill:var(--accent)}
+.s-lulus{fill:var(--good)}.s-sebagian{fill:var(--warn)}.s-gagal{fill:var(--bad)}
+.dot{display:inline-block;width:10px;height:10px;border-radius:3px}
+.mini{font-size:12px;color:var(--ink3)}
+.pill{display:inline-block;font-size:11.5px;padding:1px 8px;border-radius:10px;background:var(--surface2);color:var(--ink2);margin:1px 2px 1px 0}
+.pill.gagal{background:var(--bad-soft);color:var(--bad)}.pill.sebagian{background:var(--warn-soft);color:var(--warn)}.pill.lulus{background:var(--good-soft);color:var(--good)}
+.rca{border-left:3px solid var(--bad);padding:2px 0 2px 12px;margin:10px 0}
+.rca.ev{border-color:var(--warn)}
+.rca h4{margin:0 0 4px;font-size:14px}
+.rca p{margin:3px 0;font-size:13px;color:var(--ink2)}
+@media (max-width:860px){.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}.grid2,.grid3{grid-template-columns:1fr}}
+@media (max-width:520px){.kpis{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<a class="skip" href="#isi">Lewati ke konten</a>
+<div class="app">
+  <aside class="side" aria-label="Navigasi dashboard">
+    <div class="brand"><div class="logo" aria-hidden="true">R</div><div><b>Ratu AI</b><small>Pasca-optimasi Tahap 1–6</small></div></div>
+    <nav class="nav" id="nav" aria-label="Halaman"></nav>
+    <div class="bawah"><div class="grup">Referensi</div>
+      <div class="nav"><button type="button" id="b-metode"><svg viewBox="0 0 24 24"><path d="M4 5h16M4 12h16M4 19h10"/></svg>Metodologi &amp; sumber</button></div>
+    </div>
+  </aside>
+  <main id="isi" tabindex="-1">
+    <div class="mtabs" id="mtabs" role="navigation" aria-label="Navigasi"></div>
+    <header class="top">
+      <div>
+        <h1>Ratu AI — Benchmark Pasca-Optimasi</h1>
+        <p class="sub">Qwen3-14B-AWQ · 4 replika vLLM · max-num-seqs 4 · LiteLLM simple-shuffle · g5.12xlarge (4× A10G) · 1 sampai 20 pengguna bersamaan</p>
+        <div class="badges"><span class="badge hist" id="b-tgl"></span><span class="badge agent">Sesudah Tahap 1–6</span><span class="badge">Baseline: 20 &amp; 23 Nov (sebelum optimasi)</span></div>
+      </div>
+      <div class="aksi">
+        <button class="btn" type="button" id="cetak">Cetak / PDF</button>
+        <button class="btn" type="button" id="tema" aria-pressed="false">Tema gelap</button>
+      </div>
+    </header>
+    <section class="view" id="v-ringkas"></section>
+    <section class="view" id="v-tahap" hidden></section>
+    <section class="view" id="v-kode" hidden></section>
+    <section class="view" id="v-rute" hidden></section>
+    <section class="view" id="v-infra" hidden></section>
+    <section class="view" id="v-biaya" hidden></section>
+    <section class="view" id="v-gagal" hidden></section>
+    <section class="view" id="v-metode" hidden></section>
+    <p class="foot" id="foot"></p>
+  </main>
+</div>
+<div class="scrim" id="scrim" hidden></div>
+<aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-labelledby="drawer-judul" hidden></aside>
+<div id="tip" role="tooltip"></div>
+<script>
+const DATA = /*__DATA__*/null;
+const $ = (s, r = document) => r.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const f1 = (v) => v == null ? "—" : Number(v).toLocaleString("id-ID", { maximumFractionDigits: 1, minimumFractionDigits: 1 });
+const f0 = (v) => v == null ? "—" : Math.round(v).toLocaleString("id-ID");
+const f2 = (v) => v == null ? "—" : Number(v).toLocaleString("id-ID", { maximumFractionDigits: 2, minimumFractionDigits: 2 });
+const usd = (v, d = 4) => v == null ? "—" : "$" + Number(v).toLocaleString("en-US", { maximumFractionDigits: d, minimumFractionDigits: d });
+const pct = (v) => v == null ? "—" : f1(v) + "%";
+const TAHAP = DATA.tahap.map((t) => t.pengguna);
+
+/* ---------------- tooltip ---------------- */
+const tip = $("#tip");
+function tampilTip(e, teks) { tip.textContent = teks; tip.style.display = "block"; const w = tip.offsetWidth, h = tip.offsetHeight;
+  let x = e.clientX + 14, y = e.clientY + 14; if (x + w > innerWidth - 8) x = e.clientX - w - 14; if (y + h > innerHeight - 8) y = e.clientY - h - 14;
+  tip.style.left = x + "px"; tip.style.top = y + "px"; }
+function sembunyiTip() { tip.style.display = "none"; }
+function pasangTip(root) { root.querySelectorAll("[data-tip]").forEach((el) => {
+  el.addEventListener("mousemove", (e) => tampilTip(e, el.dataset.tip)); el.addEventListener("mouseleave", sembunyiTip);
+  el.addEventListener("focus", (e) => { const r = el.getBoundingClientRect(); tampilTip({ clientX: r.right, clientY: r.top }, el.dataset.tip); });
+  el.addEventListener("blur", sembunyiTip); }); }
+
+/* ---------------- grafik garis (sumbu x kategori = jumlah pengguna) ---------------- */
+function garis(el, o) {
+  const W = 720, H = o.h || 260, L = 52, R = 16, T = 14, B = 38, iw = W - L - R, ih = H - T - B;
+  const xs = o.x, n = xs.length, px = (i) => L + (n === 1 ? iw / 2 : (i * iw) / (n - 1));
+  const semua = o.seri.flatMap((s) => s.v.filter((v) => v != null));
+  const maks = (o.ymax ?? Math.max(...semua, 0)) * 1.08 || 1, py = (v) => T + ih - (v / maks) * ih;
+  const langkah = maks / 4;
+  let g = "";
+  for (let i = 0; i <= 4; i++) { const v = langkah * i, y = py(v); g += `<line class="gl" x1="${L}" x2="${W - R}" y1="${y}" y2="${y}"/><text class="ax" x="${L - 8}" y="${y + 4}" text-anchor="end">${o.fmt ? o.fmt(v) : f0(v)}</text>`; }
+  xs.forEach((x, i) => { g += `<text class="ax" x="${px(i)}" y="${H - B + 18}" text-anchor="middle">${x}</text>`; });
+  g += `<text class="axt" x="${L + iw / 2}" y="${H - 4}" text-anchor="middle">${esc(o.xlabel || "pengguna bersamaan")}</text>`;
+  g += `<text class="axt" x="12" y="${T + ih / 2}" text-anchor="middle" transform="rotate(-90 12 ${T + ih / 2})">${esc(o.ylabel || "")}</text>`;
+  for (const s of o.seri) {
+    let d = "", mulai = true;
+    s.v.forEach((v, i) => { if (v == null) { mulai = true; return; } d += `${mulai ? "M" : "L"}${px(i)},${py(v)}`; mulai = false; });
+    g += `<path d="${d}" fill="none" stroke="${s.warna}" stroke-width="2" ${s.putus ? 'stroke-dasharray="5 4"' : ""} stroke-linejoin="round"/>`;
+    s.v.forEach((v, i) => { if (v == null) return;
+      g += `<circle class="pt" tabindex="0" cx="${px(i)}" cy="${py(v)}" r="4.5" fill="${s.warna}" stroke="var(--surface)" stroke-width="2" data-tip="${esc(`${s.nama} · ${xs[i]} pengguna\n${o.ylabel}: ${o.fmt ? o.fmt(v) : f1(v)}`)}"/>`; });
+  }
+  el.innerHTML = `<div class="leg">${o.seri.map((s) => `<span><i class="dot" style="background:${s.warna}${s.putus ? ";opacity:.6" : ""}"></i>${esc(s.nama)}</span>`).join("")}</div>
+    <div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(o.judul || o.ylabel)}">${g}</svg></div>`;
+  pasangTip(el);
+}
+
+/* ---------------- batang bertumpuk horizontal (lulus/sebagian/gagal) ---------------- */
+function tumpuk(el, baris) {
+  const W = 720, tinggi = 22, jarak = 10, L = 150, R = 60, H = baris.length * (tinggi + jarak) + 10, iw = W - L - R;
+  let g = "";
+  baris.forEach((b, i) => {
+    const y = 4 + i * (tinggi + jarak), n = b.lulus + b.sebagian + b.gagal || 1; let x = L;
+    g += `<text class="axt" x="${L - 10}" y="${y + tinggi / 2 + 4}" text-anchor="end">${esc(b.label)}</text>`;
+    for (const k of ["lulus", "sebagian", "gagal"]) { const w = (b[k] / n) * iw; if (b[k] > 0) {
+      g += `<rect class="pt s-${k}" tabindex="0" x="${x}" y="${y}" width="${Math.max(w - 2, 1)}" height="${tinggi}" rx="4" data-tip="${esc(`${b.label}\n${k}: ${b[k]} dari ${n}`)}"/>`;
+      if (w > 26) g += `<text x="${x + w / 2 - 1}" y="${y + tinggi / 2 + 4}" text-anchor="middle" font-size="11" fill="#fff" font-weight="600">${b[k]}</text>`; } x += w; }
+    g += `<text class="ax" x="${W - R + 8}" y="${y + tinggi / 2 + 4}">${f1((100 * b.lulus) / n)}%</text>`;
+  });
+  el.innerHTML = `<div class="leg"><span><i class="dot" style="background:var(--good)"></i>lulus</span><span><i class="dot" style="background:var(--warn)"></i>sebagian</span><span><i class="dot" style="background:var(--bad)"></i>gagal</span><span class="mini">angka di kanan = % lulus v2</span></div>
+    <div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Hasil evaluator v2">${g}</svg></div>`;
+  pasangTip(el);
+}
+
+/* ---------------- batang berpasangan vertikal (baseline vs baru) ---------------- */
+function pasangan(el, o) {
+  const W = 720, H = 240, L = 46, R = 12, T = 14, B = 38, iw = W - L - R, ih = H - T - B, n = o.x.length, slot = iw / n, bw = Math.min(22, slot / 3);
+  const maks = Math.max(...o.lama.concat(o.baru).filter((v) => v != null), 1) * 1.15, py = (v) => T + ih - (v / maks) * ih;
+  let g = "";
+  for (let i = 0; i <= 4; i++) { const y = py((maks / 4) * i); g += `<line class="gl" x1="${L}" x2="${W - R}" y1="${y}" y2="${y}"/><text class="ax" x="${L - 8}" y="${y + 4}" text-anchor="end">${f0((maks / 4) * i)}</text>`; }
+  o.x.forEach((x, i) => { const cx = L + slot * i + slot / 2;
+    for (const [k, dx, kelas] of [["lama", -bw - 1, "bar-lama"], ["baru", 1, "bar-baru"]]) { const v = o[k][i]; if (v == null) continue;
+      const y = py(v), h = Math.max(T + ih - y, v > 0 ? 2 : 0);
+      g += `<rect class="pt ${kelas}" tabindex="0" x="${cx + dx}" y="${T + ih - h}" width="${bw}" height="${h}" rx="3" data-tip="${esc(`${x} pengguna · ${k === "lama" ? "sebelum optimasi" : "sesudah"}\n${o.label}: ${o.fmt ? o.fmt(v) : v}`)}"/>`;
+      if (v > 0) g += `<text class="el" x="${cx + dx + bw / 2}" y="${T + ih - h - 4}" text-anchor="middle">${o.fmt ? o.fmt(v) : v}</text>`; }
+    g += `<text class="ax" x="${cx}" y="${H - B + 18}" text-anchor="middle">${x}</text>`; });
+  g += `<text class="axt" x="${L + iw / 2}" y="${H - 4}" text-anchor="middle">pengguna bersamaan</text>`;
+  el.innerHTML = `<div class="leg"><span><i class="dot" style="background:var(--ink3);opacity:.55"></i>sebelum optimasi (20 &amp; 23 Nov)</span><span><i class="dot" style="background:var(--accent)"></i>sesudah (24 Nov)</span></div>
+    <div class="chart"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(o.label)}">${g}</svg></div>`;
+  pasangTip(el);
+}
+
+/* ---------------- tabel bisa diurutkan ---------------- */
+function tabel(el, kolom, baris, o = {}) {
+  let urut = null, arah = 1;
+  const gambar = () => {
+    let b = [...baris]; if (urut != null) b.sort((p, q) => { const a = p[urut], c = q[urut]; return (a > c ? 1 : a < c ? -1 : 0) * arah; });
+    el.innerHTML = `<div class="tw"><table><thead><tr>${kolom.map((k, i) => `<th class="${k.num ? "num" : ""}" ${urut === k.id ? `aria-sort="${arah > 0 ? "ascending" : "descending"}"` : ""}><button type="button" data-i="${i}">${esc(k.label)}</button></th>`).join("")}</tr></thead>
+      <tbody>${b.map((r) => `<tr>${kolom.map((k) => `<td class="${k.num ? "num" : ""} ${k.wrap ? "wrap" : ""}">${k.f ? k.f(r[k.id], r) : esc(r[k.id])}</td>`).join("")}</tr>`).join("")}</tbody></table></div>
+      ${o.cat ? `<p class="mini">${o.cat}</p>` : ""}`;
+    el.querySelectorAll("th button").forEach((bt) => bt.addEventListener("click", () => { const k = kolom[bt.dataset.i].id; arah = urut === k ? -arah : 1; urut = k; gambar(); }));
+  };
+  gambar();
+}
+const delta = (lama, baru, lebihKecilBaik = true, f = f1) => {
+  if (lama == null || baru == null) return "";
+  const baik = lebihKecilBaik ? baru < lama : baru > lama, sama = Math.abs(baru - lama) < 1e-9;
+  return `<span class="delta ${sama ? "netral" : baik ? "good" : "bad"}">${f(lama)} → ${f(baru)}</span>`;
+};
+const kpi = (l, v, k, d = "") => `<div class="kpi"><span class="l">${l}</span><span class="v">${v}</span><span class="k">${k}</span>${d}</div>`;
+
+/* ================================================================ RINGKASAN */
+function vRingkas() {
+  const S = DATA.total;
+  $("#v-ringkas").innerHTML = `<h2 style="margin-top:0">Apa hasil perbaikan workflow agent?</h2>
+    <div class="card hero"><p><b>Pada konfigurasi inference yang sama persis</b>, perbaikan software Tahap 1–6 menurunkan kegagalan workflow dari
+      <b>${S.lama.gagal}</b> menjadi <b>${S.baru.gagal}</b> (evaluator v2, ${S.baru.n} pertanyaan terukur, 1–20 pengguna), tanpa habis waktu, tanpa galat, dan tanpa tiket tersimpan.
+      Ekor latensi di 12–20 pengguna turun dari ±${f0(S.lama.p99_tinggi)} dtk menjadi ±${f0(S.baru.p99_tinggi)} dtk.</p>
+      <p class="batas">Satu kali jalan per tingkat konkurensi; sampel 1–8 pengguna kecil (3–24 pertanyaan). Baseline: 1–8 pengguna = 20 Nov, 10–20 pengguna = 23 Nov. Detail keterbandingan di Metodologi.</p></div>
+    <div class="kpis">
+      ${kpi("Lulus evaluator v2", pct(S.baru.lulus_pct), `${S.baru.lulus} dari ${S.baru.n} pertanyaan`, delta(S.lama.lulus_pct, S.baru.lulus_pct, false, (v) => f1(v) + "%"))}
+      ${kpi("Gagal evaluator v2", S.baru.gagal, `sebagian ${S.baru.sebagian} · baseline sebagian ${S.lama.sebagian}`, delta(S.lama.gagal, S.baru.gagal, true, f0))}
+      ${kpi("Habis waktu / galat / kosong", `${S.baru.habis} / 0 / 0`, "batas 300 dtk", delta(S.lama.habis, S.baru.habis, true, f0))}
+      ${kpi("P99 latensi, 20 pengguna", f1(S.baru.p99_20) + "<small>dtk</small>", "pertanyaan paling lambat 1%", delta(S.lama.p99_20, S.baru.p99_20))}
+      ${kpi("Panggilan LLM per workflow", f2(S.baru.llm), "rata-rata semua tahap", delta(S.lama.llm, S.baru.llm, true, f2))}
+      ${kpi("Biaya per workflow sukses", usd(S.baru.usd_sukses), `tarif $${DATA.meta.tarif}/jam`, delta(S.lama.usd_sukses, S.baru.usd_sukses, true, (v) => usd(v)))}
+    </div>
+    <div class="grid2">
+      <div class="card"><h3>Berapa yang gagal, sebelum vs sesudah perbaikan</h3><p class="ket">Jumlah pertanyaan yang dinilai gagal oleh evaluator v2 di tiap tahap.</p><div id="c-gagal"></div></div>
+      <div class="card"><h3>Waktu jawab 95% pertanyaan (P95)</h3><p class="ket">Detik sampai jawaban selesai; 95% pertanyaan lebih cepat dari ini.</p><div id="c-p95"></div></div>
+    </div>
+    <div class="card"><h3>Sesuai kriteria per jenis pertanyaan (1–20 pengguna)</h3><p class="ket">Baris atas tiap kode = sebelum optimasi, baris bawah = sesudah.</p><div id="c-kode-ringkas"></div>
+      <p class="interpret"><b>Yang paling berubah:</b> Q8 sapaan (gagal 6 → 0, median ±30 → 13 dtk), Q5 tiket (gagal 7 → 1), Q4 SOP (gagal 5 → 1). Q2, Q3, Q6, Q7 tetap 100%.</p></div>`;
+  pasangan($("#c-gagal"), { x: TAHAP, lama: DATA.tahap.map((t) => t.lama?.v2_gagal ?? null), baru: DATA.tahap.map((t) => t.baru.v2_gagal), label: "gagal v2" });
+  garis($("#c-p95"), { x: TAHAP, ylabel: "P95 (dtk)", fmt: f1, seri: [
+    { nama: "sebelum optimasi", warna: "var(--ink3)", putus: true, v: DATA.tahap.map((t) => t.lama?.p95 ?? null) },
+    { nama: "sesudah", warna: "var(--accent)", v: DATA.tahap.map((t) => t.baru.p95) }] });
+  tumpuk($("#c-kode-ringkas"), Object.entries(DATA.kode).flatMap(([k, o]) => [
+    { label: `${k} sebelum`, ...o.lama }, { label: `${k} sesudah`, ...o.baru }]));
+}
+
+/* ================================================================ PER TAHAP */
+let pilihTahap = "semua", pilihPersen = "p95";
+function vTahap() {
+  const v = $("#v-tahap");
+  v.innerHTML = `<h2 style="margin-top:0">Berapa lama menjawab saat ramai?</h2><p class="lead">Tiap pengguna mengirim 3 pertanyaan berurutan (jeda 5 dtk); urutan pertanyaan sama dengan uji sebelum perbaikan (seed tetap). P50 = waktu tengah, P95/P99 = 95%/99% pertanyaan lebih cepat dari angka itu.</p>
+    <div class="ctl"><span class="lbl">Tahap</span><div class="seg" id="seg-tahap">${["semua", ...TAHAP].map((t) => `<button type="button" data-t="${t}" aria-pressed="${String(t) === String(pilihTahap)}">${t === "semua" ? "Semua" : t + " pengguna"}</button>`).join("")}</div></div>
+    <div class="card"><h3>Waktu jawab per jumlah pengguna</h3>
+      <div class="ctl"><span class="lbl">Persentil</span><div class="seg" id="seg-p">${["p50", "p95", "p99"].map((p) => `<button type="button" data-p="${p}" aria-pressed="${p === pilihPersen}">${p.toUpperCase()}</button>`).join("")}</div></div>
+      <div id="c-lat"></div></div>
+    <div class="card" id="k-tahap"></div>`;
+  v.querySelectorAll("#seg-tahap button").forEach((b) => b.addEventListener("click", () => { pilihTahap = b.dataset.t === "semua" ? "semua" : Number(b.dataset.t); vTahap(); }));
+  v.querySelectorAll("#seg-p button").forEach((b) => b.addEventListener("click", () => { pilihPersen = b.dataset.p; vTahap(); }));
+  garis($("#c-lat"), { x: TAHAP, ylabel: `${pilihPersen.toUpperCase()} (dtk)`, fmt: f1, seri: [
+    { nama: "sebelum optimasi", warna: "var(--ink3)", putus: true, v: DATA.tahap.map((t) => t.lama?.[pilihPersen] ?? null) },
+    { nama: "sesudah", warna: "var(--accent)", v: DATA.tahap.map((t) => t.baru[pilihPersen]) }] });
+  const k = $("#k-tahap");
+  if (pilihTahap === "semua") {
+    k.innerHTML = `<h3>Semua tahap</h3><p class="ket">Klik judul kolom untuk mengurutkan. Pilih satu tahap di atas untuk melihat rincian per jenis pertanyaan.</p><div id="t-tahap"></div>`;
+    tabel($("#t-tahap"), [
+      { id: "pengguna", label: "Pengguna", num: true }, { id: "n", label: "n", num: true },
+      { id: "v2", label: "v2 lulus / sebagian / gagal", f: (v, r) => `<span class="pill lulus">${r.lulus}</span><span class="pill sebagian">${r.sebagian}</span><span class="pill gagal">${r.gagal}</span>` },
+      { id: "gagal_lama", label: "gagal baseline", num: true }, { id: "habis", label: "habis waktu", num: true },
+      { id: "mean", label: "Rata (dtk)", num: true, f: f1 }, { id: "p50", label: "P50", num: true, f: f1 }, { id: "p90", label: "P90", num: true, f: f1 },
+      { id: "p95", label: "P95", num: true, f: f1 }, { id: "p99", label: "P99", num: true, f: f1 }, { id: "min", label: "Min", num: true, f: f1 }, { id: "max", label: "Maks", num: true, f: f1 },
+      { id: "ttft_p50", label: "TTFT P50", num: true, f: f1 }, { id: "llm", label: "LLM/wf", num: true, f: f2 }, { id: "perute", label: "perute/wf", num: true, f: f2 },
+      { id: "tok_in", label: "token masuk/wf", num: true, f: f0 }, { id: "tok_out", label: "token keluar/wf", num: true, f: f0 }, { id: "deleg", label: "delegasi/wf", num: true, f: f2 },
+    ], DATA.tahap.map((t) => ({ pengguna: t.pengguna, n: t.baru.n, lulus: t.baru.v2.lulus || 0, sebagian: t.baru.v2.sebagian || 0, gagal: t.baru.v2.gagal || 0, v2: t.baru.v2_lulus_pct,
+      gagal_lama: t.lama?.v2_gagal ?? null, habis: t.baru.habis, mean: t.baru.mean, p50: t.baru.p50, p90: t.baru.p90, p95: t.baru.p95, p99: t.baru.p99, min: t.baru.min, max: t.baru.max,
+      ttft_p50: t.baru.ttft_p50, llm: t.baru.llm_per_wf, perute: t.baru.perute_per_wf, tok_in: t.baru.token_masuk_per_wf, tok_out: t.baru.token_keluar_per_wf, deleg: t.baru.delegasi_per_wf })),
+      { cat: "Token per workflow dihitung dari workflow yang seluruh panggilan modelnya cocok dengan catatan LiteLLM (88% panggilan). Delegasi baseline tidak tercatat (pencatatan baru ada sejak 24 Nov)." });
+  } else {
+    const t = DATA.tahap.find((x) => x.pengguna === pilihTahap), rows = DATA.kode_tahap.filter((r) => r.tahap === pilihTahap);
+    k.innerHTML = `<h3>${pilihTahap} pengguna — ${t.baru.n} pertanyaan</h3>
+      <div class="kpis">${kpi("P50 / P95", `${f1(t.baru.p50)} / ${f1(t.baru.p95)}<small>dtk</small>`, "sesudah", t.lama ? delta(t.lama.p95, t.baru.p95) : "")}
+        ${kpi("Lulus v2", pct(t.baru.v2_lulus_pct), `gagal ${t.baru.v2_gagal} · sebagian ${t.baru.v2_sebagian}`, t.lama ? delta(t.lama.v2_lulus_pct, t.baru.v2_lulus_pct, false, (v) => f1(v) + "%") : "")}
+        ${kpi("Antrean vLLM / permintaan", f2((t.baru.antre_ms || 0) / 1000) + "<small>dtk</small>", `TTFT vLLM ${f2((t.baru.ttft_vllm_ms || 0) / 1000)} dtk`, t.lama ? delta((t.lama.antre_ms || 0) / 1000, (t.baru.antre_ms || 0) / 1000, true, f2) : "")}</div>
+      <div id="t-kt"></div>`;
+    tabel($("#t-kt"), [
+      { id: "kode", label: "Kode" }, { id: "jenis", label: "Jenis" }, { id: "n", label: "n", num: true },
+      { id: "v", label: "v2", f: (v, r) => `<span class="pill lulus">${r.lulus}</span><span class="pill sebagian">${r.sebagian}</span><span class="pill gagal">${r.gagal}</span>` },
+      { id: "p50", label: "P50 (dtk)", num: true, f: f1 }, { id: "maks", label: "Maks (dtk)", num: true, f: f1 }, { id: "llm", label: "LLM/wf", num: true, f: f2 },
+    ], rows);
+  }
+}
+
+/* ================================================================ JENIS PERTANYAAN */
+function vKode() {
+  $("#v-kode").innerHTML = `<h2 style="margin-top:0">Apakah jawabannya benar, per jenis pertanyaan?</h2><p class="lead">Beban 1–20 pengguna digabung (±29 pertanyaan per kode). Evaluator v2 sama untuk keduanya; baseline dinilai ulang dari bukti yang tercatat saat itu.</p>
+    <div class="card"><div id="c-kode"></div></div><div class="card"><div id="t-kode"></div></div>`;
+  tumpuk($("#c-kode"), Object.entries(DATA.kode).flatMap(([k, o]) => [{ label: `${k} sebelum`, ...o.lama }, { label: `${k} sesudah`, ...o.baru }]));
+  tabel($("#t-kode"), [
+    { id: "kode", label: "Kode" }, { id: "jenis", label: "Jenis" },
+    { id: "lama", label: "Sebelum: lulus/sebagian/gagal", f: (v, r) => `${r.lama.lulus} / ${r.lama.sebagian} / ${r.lama.gagal}` },
+    { id: "baru", label: "Sesudah: lulus/sebagian/gagal", f: (v, r) => `${r.baru.lulus} / ${r.baru.sebagian} / ${r.baru.gagal}` },
+    { id: "med20", label: "Median 20 Nov", num: true, f: f1 }, { id: "med23", label: "Median 23 Nov", num: true, f: f1 }, { id: "medb", label: "Median sesudah", num: true, f: f1 },
+  ], Object.entries(DATA.kode).map(([k, o]) => ({ kode: k, jenis: o.jenis, lama: o.lama, baru: o.baru, med20: o.median_20, med23: o.median_23, medb: o.median_baru })),
+  { cat: "Median 20 Nov = tahap 1–8 pengguna; 23 Nov = 10–20 pengguna; sesudah = 1–20 pengguna. Q2 dan Q6 tidak disentuh optimasi; selisih median keduanya dalam ragam antar-jalan." });
+}
+
+/* ================================================================ RUTE & ORKESTRASI */
+function vRute() {
+  const R = DATA.rute, O = DATA.orkes;
+  const baris = (l, v, t, ok) => `<tr><td>${l}</td><td class="num">${v}</td><td class="num">${t ?? ""}</td><td>${ok == null ? "" : ok ? '<span class="ok">tercapai</span>' : '<span class="no">belum</span>'}</td></tr>`;
+  $("#v-rute").innerHTML = `<h2 style="margin-top:0">Apakah pertanyaan diarahkan ke agent yang tepat?</h2><p class="lead">Diukur dari span model (agent mana yang benar-benar dipanggil) dan catatan penjaga per permintaan — bukan dari teks jawaban.</p>
+    <div class="grid2">
+      <div class="card"><h3>Q4 — prosedur pengajuan cuti</h3><div class="tw"><table><thead><tr><th>Metrik</th><th class="num">Nilai</th><th class="num">Target</th><th></th></tr></thead><tbody>
+        ${baris("Pilihan pertama model = pemegang SOP", `${R.q4.first_n}/${R.q4.n} (${pct(R.q4.first_choice_acc_pct)})`, "", null)}
+        ${baris("…baseline 23 Nov (beban)", `${R.q4.base_first}`, "", null)}
+        ${baris("Agent efektif = pemegang SOP", pct(R.q4.effective_acc_pct), "≥ 95%", R.q4.effective_acc_pct >= 95)}
+        ${baris("Pengalihan otomatis Tahap 3", R.q4.dialihkan, "", null)}
+        ${baris("Agent tidak relevan dieksekusi", R.q4.agent_tidak_relevan_dieksekusi, "0", R.q4.agent_tidak_relevan_dieksekusi === 0)}
+        ${baris("cari_sop dipanggil", pct(R.q4.cari_sop_pct), "≥ 98%", R.q4.cari_sop_pct >= 98)}
+        ${baris("Jawaban akhir lulus v2", pct(R.q4.final_lulus_pct), "", null)}
+        ${baris("Fallback berputar", R.q4.fallback_batas, "0", R.q4.fallback_batas === 0)}
+      </tbody></table></div><p class="mini">Pemegang alat dokumen untuk akun uji: ${esc(R.q4.pemegang_dokumen.join(", "))}. Pilihan pertama: ${esc(Object.entries(R.q4.pilihan_pertama).map(([a, n]) => `${a} ${n}×`).join(", "))}.</p></div>
+      <div class="card"><h3>Q1, Q5, Q8</h3><div class="tw"><table><thead><tr><th>Metrik</th><th class="num">Nilai</th></tr></thead><tbody>
+        <tr><td>Q1 periode argumen = September 2026</td><td class="num">${R.q1.periode_sesuai}/${R.q1.n}</td></tr>
+        <tr><td>Q1 angka benar</td><td class="num">${R.q1.angka_benar}/${R.q1.n}</td></tr>
+        <tr><td>Q1 ditolak penjaga periode (perlu-periode)</td><td class="num">${R.q1.perlu_periode_ditolak}</td></tr>
+        <tr><td>Q5 persetujuan karangan / delegasi berulang / alat berulang</td><td class="num">${R.q5.persetujuan_karangan_ditolak} / ${R.q5.delegasi_berulang_ditolak} / ${R.q5.alat_berulang}</td></tr>
+        <tr><td>Q5 rancangan ganda / klaim tersimpan palsu / kosong / timeout</td><td class="num">${R.q5.rancangan_ganda} / ${R.q5.klaim_tersimpan_palsu} / ${R.q5.kosong} / ${R.q5.timeout}</td></tr>
+        <tr><td>Q5 berhenti menunggu pengguna: klarifikasi / tawaran</td><td class="num">${R.q5.berhenti_hitl.klarifikasi || 0} / ${R.q5.berhenti_hitl.tawaran || 0}</td></tr>
+        <tr><td>Q5 sub-kategori karangan dikosongkan (Tahap 6)</td><td class="num">${R.q5.sub_dikosongkan}</td></tr>
+        <tr><td>Q8 dijawab langsung tanpa delegasi</td><td class="num">${R.q8.langsung_tanpa_delegasi}/${R.q8.n}</td></tr>
+        <tr><td>Q8 efisien (tanpa alat & delegasi)</td><td class="num">${pct(R.q8.efisien_pct)} <span class="mini">baseline ${esc(R.q8.base_efisien)}</span></td></tr>
+        <tr><td>Q8 teks alat bocor</td><td class="num">${R.q8.teks_alat_bocor}</td></tr>
+        <tr><td>Q8 median</td><td class="num">${f1(R.q8.median_dtk)} dtk</td></tr>
+      </tbody></table></div></div>
+    </div>
+    <div class="card"><h3>Orkestrasi — seluruh ${O.n} workflow beban</h3><div class="kpis">
+      ${kpi("Panggilan LLM / workflow", f2(O.llm), `perute ${f2(O.perute)} · agent bawahan ${f2(O.bawahan)}`)}
+      ${kpi("Delegasi aktual / workflow", f2(O.delegasi), "Q8 tidak pernah didelegasikan")}
+      ${kpi("Ditolak penjaga", O.ditolak_total, esc(Object.entries(O.ditolak).map(([k, n]) => `${k} ${n}`).join(" · ")))}
+    </div><p class="interpret"><b>Penjaga bekerja tanpa salah tolak yang terlihat:</b> 9× agent dicegah memilih sub-kategori sendiri (menunggu pengguna), 4 sub-kategori karangan dikosongkan, 1 delegasi ke agent tanpa alat ditolak. Satu penolakan itu justru berujung jawaban menyesatkan — lihat halaman Kegagalan (F1).</p></div>`;
+}
+
+/* ================================================================ INFRASTRUKTUR */
+function vInfra() {
+  $("#v-infra").innerHTML = `<h2 style="margin-top:0">Antrean dan pembagian ke 4 GPU</h2><p class="lead">Dari /metrics vLLM keempat replika (dicuplik awal & akhir tiap tahap) dan nvidia-smi tiap 0,5 dtk.</p>
+    <div class="grid2"><div class="card"><h3>Utilisasi GPU rata-rata</h3><div id="c-gpu"></div></div><div class="card"><h3>Antrean vLLM per permintaan</h3><div id="c-antre"></div></div></div>
+    <div class="grid2"><div class="card"><h3>TTFT di vLLM (rata-rata per permintaan)</h3><div id="c-ttftv"></div></div><div class="card"><h3>TTFT yang terlihat pengguna (P50)</h3><div id="c-ttftu"></div></div></div>
+    <div class="card"><h3>Sebaran panggilan model antar-replika (simple-shuffle)</h3><div id="t-rep"></div></div>
+    <p class="caveat"><b>Tidak tercatat:</b> pemakaian KV cache, request berjalan/menunggu per detik, dan throughput token dari log vLLM — instance sudah dimatikan sebelum log diambil. Preemption 0 di semua tahap (dari /metrics). Kolom "prefix-cache" = rasio cache hit awalan prompt, bukan pemakaian KV.</p>`;
+  const ser = (k, f = (v) => v) => [{ nama: "sebelum optimasi", warna: "var(--ink3)", putus: true, v: DATA.tahap.map((t) => t.lama?.[k] == null ? null : f(t.lama[k])) },
+    { nama: "sesudah", warna: "var(--accent)", v: DATA.tahap.map((t) => t.baru[k] == null ? null : f(t.baru[k])) }];
+  garis($("#c-gpu"), { x: TAHAP, ylabel: "util (%)", fmt: f0, ymax: 100, seri: ser("gpu_util") });
+  garis($("#c-antre"), { x: TAHAP, ylabel: "antrean (dtk)", fmt: f2, seri: ser("antre_ms", (v) => v / 1000) });
+  garis($("#c-ttftv"), { x: TAHAP, ylabel: "TTFT vLLM (dtk)", fmt: f2, seri: ser("ttft_vllm_ms", (v) => v / 1000) });
+  garis($("#c-ttftu"), { x: TAHAP, ylabel: "TTFT P50 (dtk)", fmt: f1, seri: ser("ttft_p50") });
+  const REP = ["qwen14-vllm", "qwen14-gpu1", "qwen14-gpu2", "qwen14-gpu3"];
+  tabel($("#t-rep"), [{ id: "pengguna", label: "Pengguna", num: true }, ...REP.map((r, i) => ({ id: r, label: `GPU ${i} (${r})`, num: true })), { id: "pre", label: "Preemption", num: true }, { id: "cache", label: "Prefix-cache hit", num: true, f: (v) => v == null ? "—" : f0(v * 100) + "%" }],
+    DATA.tahap.map((t) => ({ pengguna: t.pengguna, ...Object.fromEntries(REP.map((r) => [r, t.baru.replika?.[r]?.panggilan ?? 0])), pre: t.baru.preemption, cache: t.baru.kv_cache })),
+    { cat: "Angka = jumlah panggilan model per replika pada tahap itu (sesudah optimasi)." });
+}
+
+/* ================================================================ THROUGHPUT & BIAYA */
+function vBiaya() {
+  const S = DATA.total;
+  $("#v-biaya").innerHTML = `<h2 style="margin-top:0">Pertanyaan tuntas per menit dan biaya server</h2><p class="lead">Durasi tahap = jam dinding dari pertanyaan pertama sampai pertanyaan terakhir tahap itu selesai. Tarif instance $${DATA.meta.tarif}/jam (cek ulang terhadap tagihan AWS aktual).</p>
+    <div class="kpis">${kpi("Waktu GPU tahap beban", f0(S.baru.durasi) + "<small>dtk</small>", "1–20 pengguna, tanpa jeda antar-tahap", delta(S.lama.durasi, S.baru.durasi, true, f0))}
+      ${kpi("Biaya tahap beban", usd(S.baru.biaya, 2), `${S.baru.n} workflow`, delta(S.lama.biaya, S.baru.biaya, true, (v) => usd(v, 2)))}
+      ${kpi("Biaya per workflow sukses", usd(S.baru.usd_sukses), "v2 lulus", delta(S.lama.usd_sukses, S.baru.usd_sukses, true, (v) => usd(v)))}</div>
+    <div class="card"><h3>Workflow sukses per menit</h3><div id="c-tp"></div><p class="interpret"><b>Lonjakan di 12–16 pengguna</b> terutama karena ekor panjang baseline (P99 200–239 dtk) yang memperpanjang tahap; bukan GPU yang lebih cepat. Throughput dibatasi desain uji (3 pertanyaan per pengguna, jeda 5 dtk), bukan kapasitas maksimum.</p></div>
+    <div class="card"><div id="t-biaya"></div></div>`;
+  pasangan($("#c-tp"), { x: TAHAP, lama: DATA.tahap.map((t) => t.lama?.wf_sukses_per_menit ?? null), baru: DATA.tahap.map((t) => t.baru.wf_sukses_per_menit), label: "workflow sukses/menit", fmt: (v) => f1(v) });
+  tabel($("#t-biaya"), [{ id: "pengguna", label: "Pengguna", num: true }, { id: "dur", label: "Durasi (dtk)", num: true, f: f0 }, { id: "wf", label: "wf/menit", num: true, f: f1 }, { id: "ok", label: "sukses/menit", num: true, f: f1 },
+    { id: "biaya", label: "Biaya tahap", num: true, f: (v) => usd(v, 3) }, { id: "per", label: "$/wf", num: true, f: (v) => usd(v) }, { id: "ps", label: "$/sukses", num: true, f: (v) => usd(v) }, { id: "psl", label: "$/sukses baseline", num: true, f: (v) => usd(v) }],
+    DATA.tahap.map((t) => ({ pengguna: t.pengguna, dur: t.baru.durasi_dtk, wf: t.baru.wf_per_menit, ok: t.baru.wf_sukses_per_menit, biaya: t.baru.biaya_usd, per: t.baru.usd_per_wf, ps: t.baru.usd_per_sukses, psl: t.lama?.usd_per_sukses })));
+}
+
+/* ================================================================ KEGAGALAN */
+let gTahap = "semua", gKode = "semua";
+function vGagal() {
+  const G = DATA.gagal, kodes = [...new Set(G.map((g) => g.kode))].sort();
+  const lolos = G.filter((g) => (gTahap === "semua" || g.tahap === gTahap) && (gKode === "semua" || g.kode === gKode));
+  $("#v-gagal").innerHTML = `<h2 style="margin-top:0">Daftar yang tidak lulus penuh</h2><p class="lead">${G.length} dari ${DATA.total.baru.n} pertanyaan tidak lulus penuh (${DATA.total.baru.gagal} gagal, ${DATA.total.baru.sebagian} sebagian). Tidak ada kegagalan material: tidak ada klaim tersimpan palsu, pelanggaran hak akses, maupun operasi ganda.</p>
+    <div class="card">${DATA.rca.map((r) => `<div class="rca ${r.kelas}"><h4>${esc(r.judul)}</h4>${r.isi.map((p) => `<p>${esc(p)}</p>`).join("")}</div>`).join("")}</div>
+    <div class="ctl"><span class="lbl">Tahap</span><div class="seg" id="sg-t">${["semua", ...TAHAP].map((t) => `<button type="button" data-t="${t}" aria-pressed="${String(t) === String(gTahap)}">${t === "semua" ? "Semua" : t}</button>`).join("")}</div>
+      <span class="lbl">Kode</span><div class="seg" id="sg-k">${["semua", ...kodes].map((k) => `<button type="button" data-k="${k}" aria-pressed="${k === gKode}">${k === "semua" ? "Semua" : k}</button>`).join("")}</div></div>
+    <div class="card"><div id="t-gagal"></div></div>`;
+  $("#v-gagal").querySelectorAll("#sg-t button").forEach((b) => b.addEventListener("click", () => { gTahap = b.dataset.t === "semua" ? "semua" : Number(b.dataset.t); vGagal(); }));
+  $("#v-gagal").querySelectorAll("#sg-k button").forEach((b) => b.addEventListener("click", () => { gKode = b.dataset.k; vGagal(); }));
+  tabel($("#t-gagal"), [{ id: "tahap", label: "Pengguna", num: true }, { id: "kode", label: "Kode" }, { id: "v2", label: "v2", f: (v) => `<span class="pill ${v}">${v}</span>` },
+    { id: "kategori", label: "Kategori" }, { id: "dtk", label: "dtk", num: true, f: f1 }, { id: "alat", label: "Alat dipanggil", f: (v) => esc((v || []).join(", ") || "—") },
+    { id: "agent", label: "Agent pertama → efektif", f: (v, r) => esc(`${r.pertama || "—"} → ${(r.efektif || []).join(", ") || "—"}`) },
+    { id: "penjaga", label: "Penjaga", f: (v, r) => esc([...(r.ditolak || []), r.berhenti ? `berhenti: ${r.berhenti}` : ""].filter(Boolean).join(" · ") || "—") },
+    { id: "trace", label: "Trace", f: (v) => `<span class="mini">${esc(v.slice(0, 8))}</span>` }], lolos, { cat: `${lolos.length} baris. Isi jawaban tidak ditampilkan di dashboard; ada di jawaban.jsonl (laptop).` });
+}
+
+/* ================================================================ CARA UJI (sama polanya dengan halaman "Cara uji" uji lain) */
+function vMetode() {
+  const M = DATA.meta;
+  $("#v-metode").innerHTML = `<h2 style="margin-top:0">Cara uji pasca-optimasi</h2>
+    <p class="lead">Benchmark konkurensi 24 November 2026: skenario, workload, dan setelan server yang sama dengan uji 20 &amp; 23 November, sesudah perbaikan workflow agent Tahap 1–6.</p>
+    <div class="card"><h3>Sumber data</h3><ul>${M.sumber.map((k) => `<li><code>${esc(k)}</code></li>`).join("")}</ul></div>
+    <div class="card"><h3>Cara uji</h3><ul>${M.konfig.map((k) => `<li>${esc(k)}</li>`).join("")}</ul>
+      <p class="ket">Yang diukur per pertanyaan: waktu sampai jawaban selesai, waktu kata pertama yang terlihat pengguna, panggilan model per agent (span), alat yang dipanggil beserta argumennya, keputusan penjaga alur & rute, dan token per panggilan (dicocokkan ke catatan LiteLLM). Isi jawaban tidak masuk dashboard.</p></div>
+    <div class="card"><h3>Keterbandingan dengan uji sebelum perbaikan</h3><ul>${M.banding.map((k) => `<li>${esc(k)}</li>`).join("")}</ul></div>
+    <div class="card"><h3>Batasan</h3><ul><li>${esc(M.cakupan)}</li>${M.batasan.map((k) => `<li>${esc(k)}</li>`).join("")}</ul></div>`;
+}
+
+/* ================================================================ NAVIGASI */
+const VIEWS = [["ringkas", "Ringkasan", vRingkas, "M3 12l9-8 9 8M5 10v10h14V10"], ["tahap", "Per tahap", vTahap, "M4 20V10M10 20V4M16 20v-7M22 20H2"],
+  ["kode", "Jenis pertanyaan", vKode, "M4 6h16M4 12h16M4 18h10"], ["rute", "Rute & orkestrasi", vRute, "M6 3v12a3 3 0 0 0 3 3h9M15 15l3 3-3 3"],
+  ["infra", "GPU & antrean", vInfra, "M4 7h16v10H4zM8 11h2M14 11h2"], ["biaya", "Throughput & biaya", vBiaya, "M12 2v20M17 6H9a3 3 0 0 0 0 6h6a3 3 0 0 1 0 6H6"],
+  ["gagal", "Kegagalan", vGagal, "M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"],
+  ["metode", "Cara uji", vMetode, "M4 5h16M4 12h16M4 19h10"]];
+function buka(k) {
+  VIEWS.forEach(([id, , f]) => { const el = $("#v-" + id); el.hidden = id !== k; if (id === k) f(); });
+  document.querySelectorAll("[data-v]").forEach((b) => b.setAttribute("aria-current", b.dataset.v === k ? "page" : "false"));
+  try { localStorage.setItem("halaman-pasca", k); } catch (e) {}
+}
+$("#nav").innerHTML = VIEWS.map(([k, l, , ik]) => `<button type="button" data-v="${k}"><svg viewBox="0 0 24 24"><path d="${ik}"/></svg>${l}</button>`).join("");
+$("#mtabs").innerHTML = VIEWS.map(([k, l]) => `<button type="button" class="btn" data-v="${k}">${l}</button>`).join("");
+document.querySelectorAll("[data-v]").forEach((b) => b.addEventListener("click", () => buka(b.dataset.v)));
+$("#b-metode").addEventListener("click", () => buka("metode"));
+$("#cetak").addEventListener("click", () => print());
+const tema = $("#tema");
+const setTema = (t) => { document.documentElement.dataset.theme = t; tema.textContent = t === "dark" ? "Tema terang" : "Tema gelap"; tema.setAttribute("aria-pressed", String(t === "dark")); try { localStorage.setItem("tema-dashboard", t); } catch (e) {} };
+tema.addEventListener("click", () => setTema(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
+// Dipanggil hasil-pengujian.html saat dashboard ini ditanam sebagai iframe (pola yang sama dengan dashboard lain).
+function pasangTema(t) { setTema(t === "dark" ? "dark" : "light"); }
+if (document.documentElement.dataset.theme === "dark") setTema("dark");
+$("#b-tgl").textContent = DATA.meta.tanggal;
+$("#foot").textContent = `Dibangun ${DATA.meta.dibuat} dari ${DATA.meta.sumber[0]} · scripts/buat-dashboard-pasca-optimasi.py`;
+let awal = "ringkas"; try { awal = localStorage.getItem("halaman-pasca") || "ringkas"; } catch (e) {}
+buka(VIEWS.some(([k]) => k === awal) ? awal : "ringkas");
+</script>
+</body>
+</html>

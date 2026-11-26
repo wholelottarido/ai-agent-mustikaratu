@@ -1,0 +1,270 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ratu AI — Qwen3.8-27B</title>
+<script>try{var t=localStorage.getItem('tema-dashboard');if(t==='dark'||t==='light')document.documentElement.dataset.theme=t}catch(e){}</script>
+<style>
+/*__CSS__*/
+:root{--m14:#d97706;--m27:#4f46e5;--w-model:#4f46e5;--w-alat:#0f9d76;--w-selesai:#0f9d76;--w-habis:#b4341f}
+:root[data-theme="dark"]{--m14:#f59e0b;--m27:#8b8ff9;--w-model:#8b8ff9;--w-alat:#34d399;--w-selesai:#34d399;--w-habis:#f0a595}
+.cek-ok{color:var(--good);font-weight:700}.cek-no{color:var(--bad);font-weight:700}
+</style>
+</head>
+<body>
+<a class="skip" href="#isi">Lewati ke konten</a>
+<div class="app">
+  <aside class="side" aria-label="Navigasi">
+    <div class="brand"><div class="logo" aria-hidden="true">R</div><div><b>Ratu AI</b><small>Qwen3.8-27B</small></div></div>
+    <div><div class="grup">Laporan</div><nav class="nav" id="nav"></nav></div>
+  </aside>
+  <main id="isi" tabindex="-1">
+    <div class="mtabs" id="mtabs" role="navigation" aria-label="Navigasi"></div>
+    <header class="top">
+      <div>
+        <h1>Qwen3.8-27B di Ratu AI</h1>
+        <p class="sub" id="sub"></p>
+        <div class="badges"><span class="badge hist">Hasil uji tetap</span><span class="badge agent">Diuji lewat agent dan LiteLLM</span><span class="badge">Skenario sama dengan Qwen3-14B</span></div>
+      </div>
+      <div class="aksi">
+        <button class="btn" type="button" id="cetak"><svg viewBox="0 0 24 24"><path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M8 14h8v7H8z"/></svg>Cetak / PDF</button>
+        <button class="btn" type="button" id="tema" aria-pressed="false">Tema gelap</button>
+      </div>
+    </header>
+    <section class="view" id="v-banding"></section>
+    <section class="view" id="v-hasil" hidden></section>
+    <section class="view" id="v-akurasi" hidden></section>
+    <section class="view" id="v-hambatan" hidden></section>
+    <section class="view" id="v-biaya" hidden></section>
+    <p class="foot" id="foot"></p>
+  </main>
+</div>
+<div id="tip" role="tooltip"></div>
+<script>
+"use strict";
+const DATA = /*__DATA__*/null;
+/*__HELPER__*/
+const P27 = DATA.perf_27b, P14 = DATA.perf_14b, AK = DATA.akurasi, TOK = DATA.token_27b, TOK14 = DATA.token_14b;
+const COST = DATA.biaya, BN = DATA.bottleneck, KAT = DATA.kategori, CFG = DATA.konfigurasi;
+const G = DATA.grup.filter(g => P27[g]);
+const NAMA_G = { "berurutan": "Satu per satu (40)", "beban-1": "1 pengguna", "beban-2": "2 pengguna", "beban-3": "3 pengguna", "beban-5": "5 pengguna", "beban-8": "8 pengguna" };
+const PENDEK = g => g === "berurutan" ? "Acuan" : g.split("-")[1];
+const W = { a: "--m14", b: "--m27" };
+const pct = (a, b) => (a == null || b == null || !a) ? null : 100 * (b / a - 1);
+const dl = (a, b, kecilBaik = true) => { const p = pct(a, b); if (p == null) return ""; const baik = kecilBaik ? p < 0 : p > 0;
+  return delta(Math.abs(p) < 3 ? "netral" : baik ? "good" : "bad", `${p > 0 ? "▲" : "▼"} ${nf0(Math.abs(p))}% vs 14B`); };
+const legModel = () => legenda([["Qwen3-14B", W.a, "lingkaran"], ["Qwen3.8-27B", W.b, "lingkaran"]]);
+const S8 = P27["beban-8"] || {}, S8b = P14["beban-8"] || {}, S0 = P27["berurutan"] || {}, S0b = P14["berurutan"] || {};
+
+/* ======================= PERBANDINGAN 14B vs 27B */
+function vBanding() {
+  const a = AK.semua_97.sesuai_kriteria, b = AK.baseline_14b.semua_97;
+  $("#v-banding").innerHTML = `<h2 style="margin-top:0">Qwen3-14B vs Qwen3.8-27B</h2>
+  <div class="card hero"><p>${esc(DATA.teks.banding)}</p>
+    <p class="batas">Kedua model diuji dengan skrip, 97 skenario, kriteria benar, dan pola tahap yang sama. Yang berbeda bukan cuma modelnya: 14B memakai 4 salinan model (1 per GPU) dengan batas konteks 16.384, sedangkan 27B memakai 1 salinan yang dibelah ke 4 GPU dengan batas konteks 8.192. Jadi ini perbandingan model <i>beserta</i> setelannya.</p></div>
+  <div class="kpis">
+    ${kpi("Sesuai kriteria (97 skenario)", `${b.benar} → ${a.benar}`, `/${a.n}`, `${nf(b.persen)}% → ${nf(a.persen)}%`, dl(b.persen, a.persen, false))}
+    ${kpi("Habis waktu (lebih dari 300 dtk)", `${AK.baseline_14b.habis_waktu ?? 0} → ${AK.galat_dan_halusinasi.habis_waktu}`, "", "klien berhenti menunggu di 5 menit")}
+    ${kpi("Waktu tengah, satu per satu", `${nf(S0b.p50_s)} → ${nf(S0.p50_s)}`, "dtk", "tanpa antrean, 1 pertanyaan pada satu waktu", dl(S0b.p50_s, S0.p50_s))}
+    ${kpi("Waktu tengah, 8 pengguna", `${nf(S8b.p50_s)} → ${nf(S8.p50_s)}`, "dtk", "8 orang bertanya bersamaan", dl(S8b.p50_s, S8.p50_s))}
+    ${kpi("Selesai per menit, 8 pengguna", `${nf(S8b.workflow_per_menit, 2)} → ${nf(S8.workflow_per_menit, 2)}`, "", "berapa pertanyaan tuntas tiap menit", dl(S8b.workflow_per_menit, S8.workflow_per_menit, false))}
+    ${kpi("Kecepatan menulis per panggilan", `${nf(S0b.token_keluar_per_dtk_per_panggilan)} → ${nf(S0.token_keluar_per_dtk_per_panggilan)}`, "tok/dtk", "saat sepi, jadi bukan karena antrean", dl(S0b.token_keluar_per_dtk_per_panggilan, S0.token_keluar_per_dtk_per_panggilan, false))}
+  </div>
+  <div class="card"><h3>Waktu jawab tengah (P50) per tahap</h3><p class="ket">Dari pertanyaan dikirim sampai jawaban selesai, diukur di laptop. Batas 300 detik per pertanyaan, jadi nilai yang mentok di ±300 berarti banyak yang tidak selesai.</p>${legModel()}<div class="chart" id="bd-c"></div></div>
+  <div class="card"><h3>Pertanyaan selesai per menit</h3><p class="ket">Makin tinggi makin banyak yang bisa dilayani server dalam waktu sama.</p>${legModel()}<div class="chart" id="bd-t"></div></div>
+  <div class="card"><h3>Tabel per tahap</h3><div id="bd-tb"></div></div>
+  <div class="card"><h3>Ringkasan beda keduanya</h3><div id="bd-r"></div></div>`;
+  pasang($("#bd-c"), w => batang(w, { xs: G.map(PENDEK), xJudul: "tahap (pengguna bersamaan)", yJudul: "detik", desimal: 1, aria: "P50 per tahap",
+    series: [["a", P14], ["b", P27]].map(([k, P]) => ({ nama: k === "a" ? "14B" : "27B", warna: W[k], nilai: G.map(g => P[g]?.p50_s ?? null),
+      tips: G.map(g => P[g] ? `${k === "a" ? "Qwen3-14B" : "Qwen3.8-27B"}\n${NAMA_G[g]} · P50: ${nf(P[g].p50_s)} dtk\nn = ${P[g].n} · habis waktu ${P[g].habis_waktu}` : "") })) }));
+  pasang($("#bd-t"), w => batang(w, { xs: G.map(PENDEK), xJudul: "tahap (pengguna bersamaan)", yJudul: "pertanyaan/menit", desimal: 2, aria: "Throughput per tahap",
+    series: [["a", P14], ["b", P27]].map(([k, P]) => ({ nama: k === "a" ? "14B" : "27B", warna: W[k], nilai: G.map(g => P[g]?.workflow_per_menit ?? null),
+      tips: G.map(g => P[g] ? `${k === "a" ? "Qwen3-14B" : "Qwen3.8-27B"}\n${NAMA_G[g]}: ${nf(P[g].workflow_per_menit, 2)} per menit` : "") })) }));
+  tabel($("#bd-tb"), { judul: "14B vs 27B per tahap", berkas: "banding-14b-27b", cari: false,
+    kol: [{ key: "g", label: "Tahap" }, { key: "n", label: "n", num: true },
+      { key: "pa", label: "P50 14B (dtk)", num: true, f: v => nf(v) }, { key: "pb", label: "P50 27B (dtk)", num: true, f: v => nf(v) }, { key: "dp", label: "Selisih", num: true, f: v => v == null ? "—" : (v > 0 ? "+" : "") + nf0(v) + "%" },
+      { key: "qa", label: "P95 14B", num: true, f: v => nf(v) }, { key: "qb", label: "P95 27B", num: true, f: v => nf(v) },
+      { key: "ta", label: "Per menit 14B", num: true, f: v => nf(v, 2) }, { key: "tb", label: "Per menit 27B", num: true, f: v => nf(v, 2) },
+      { key: "ha", label: "Habis waktu 14B/27B" }],
+    rows: G.map(g => { const x = P14[g] || {}, y = P27[g] || {};
+      return { g: NAMA_G[g], n: y.n, pa: x.p50_s, pb: y.p50_s, dp: pct(x.p50_s, y.p50_s), qa: x.p95_s, qb: y.p95_s, ta: x.workflow_per_menit, tb: y.workflow_per_menit, ha: `${x.habis_waktu ?? "—"} / ${y.habis_waktu ?? "—"}` }; }) });
+  tabel($("#bd-r"), { judul: "Beda 14B dan 27B", berkas: "beda-model", cari: false,
+    kol: [{ key: "h", label: "Hal", wrap: true }, { key: "a", label: "Qwen3-14B", wrap: true }, { key: "b", label: "Qwen3.8-27B", wrap: true }], rows: DATA.beda });
+}
+
+/* ======================= HASIL & PERFORMA 27B */
+function vHasil() {
+  const tot = DATA.total_27b;
+  $("#v-hasil").innerHTML = `<h2 style="margin-top:0">Hasil Qwen3.8-27B</h2>
+  <p class="lead">${esc(CFG.mesin)} · diuji ${esc(CFG.tanggal)} · ${esc(CFG.model)}. Jalur: agent → LiteLLM (pembagi permintaan) → vLLM (mesin model). Data: <code>${esc(DATA.folder)}</code>.</p>
+  <div class="kpis">
+    ${kpi("Skenario diuji", tot.n, "", `${tot.selesai} selesai · ${tot.habis_waktu} habis waktu`)}
+    ${kpi("Sesuai kriteria", `${AK.semua_97.sesuai_kriteria.benar}/${AK.semua_97.sesuai_kriteria.n}`, "", `semua yang selesai menjawab benar (${tot.selesai}/${tot.selesai})`)}
+    ${kpi("Satu per satu: P50 / P95", `${nf(S0.p50_s)} / ${nf(S0.p95_s)}`, "dtk", `n=${S0.n} · ${S0.habis_waktu} habis waktu`)}
+    ${kpi("8 pengguna: P50 / P95", `${nf(S8.p50_s)} / ${nf(S8.p95_s)}`, "dtk", `n=${S8.n} · ${S8.habis_waktu} habis waktu`)}
+    ${kpi("8 pengguna: antre di vLLM", nf((S8.antre_vllm_ms || 0) / 1000, 1), "dtk", "rata-rata menunggu giliran per panggilan model")}
+    ${kpi("Kecepatan menulis", nf(S0.token_keluar_per_dtk_per_panggilan), "tok/dtk", "per panggilan saat sepi · 14B: ±49")}
+  </div>
+  <div class="card"><h3>Waktu jawab per tahap</h3><p class="ket">P50 = waktu tengah. P95 = 95 dari 100 pertanyaan selesai lebih cepat dari ini. Garis 300 detik adalah batas tunggu; pertanyaan yang melewatinya dihitung habis waktu.</p><div class="ctl"><span id="hs-m"></span></div><div class="chart" id="hs-c"></div></div>
+  <div class="card"><h3>Berapa yang selesai, berapa yang habis waktu</h3><div class="chart" id="hs-s"></div></div>
+  <div class="card"><h3>Angka lengkap per tahap</h3><div id="hs-t"></div></div>`;
+  let m = "p50_s";
+  const MI = { p50_s: "P50", p95_s: "P95", rata_s: "Rata-rata", max_s: "Maksimum" };
+  const g1 = pasang($("#hs-c"), w => garis(w, { xs: G.map(g => NAMA_G[g]), xsPendek: G.map(PENDEK), xJudul: "tahap", yJudul: "detik", aria: MI[m], kanan: 70,
+    series: [{ nama: MI[m], warna: W.b, nilai: G.map(g => P27[g][m]), tips: G.map(g => `${NAMA_G[g]} · ${MI[m]}: ${nf(P27[g][m])} dtk\nn = ${P27[g].n} · ${P27[g].habis_waktu} habis waktu`) }] }));
+  segmen($("#hs-m"), Object.entries(MI), m, k => { m = k; gambarUlang(g1); }, "Pilih statistik");
+  pasang($("#hs-s"), w => tumpuk(w, { kunci: ["selesai", "habis"], nama: { selesai: "Selesai", habis: "Habis waktu" }, satuan: "pertanyaan", xJudul: "jumlah pertanyaan", aria: "Selesai vs habis waktu",
+    rows: G.map(g => ({ label: NAMA_G[g], bag: { selesai: P27[g].selesai, habis: P27[g].habis_waktu } })) }));
+  tabel($("#hs-t"), { judul: "Performa 27B per tahap", berkas: "performa-27b", cari: false,
+    kol: [{ key: "g", label: "Tahap" }, { key: "n", label: "n", num: true }, { key: "selesai", label: "Selesai", num: true }, { key: "habis_waktu", label: "Habis waktu", num: true },
+      { key: "p50_s", label: "P50 (dtk)", num: true, f: v => nf(v) }, { key: "p90_s", label: "P90", num: true, f: v => nf(v) }, { key: "p95_s", label: "P95", num: true, f: v => nf(v) }, { key: "p99_s", label: "P99", num: true, f: v => nf(v) },
+      { key: "rata_s", label: "Rata-rata", num: true, f: v => nf(v) }, { key: "workflow_per_menit", label: "Per menit", num: true, f: v => nf(v, 2) },
+      { key: "antre_vllm_ms", label: "Antre vLLM (ms)", num: true, f: nf0 }, { key: "panggilan_model_per_workflow", label: "Panggilan model/pertanyaan", num: true, f: v => nf(v, 2) },
+      { key: "kv_cache_maks_persen", label: "Memori KV maks (%)", num: true, f: v => nf(v) }],
+    rows: G.map(g => Object.assign({ g: NAMA_G[g] }, P27[g])) });
+}
+
+/* ======================= AKURASI */
+function vAkurasi() {
+  const GH = AK.galat_dan_halusinasi, per = AK.semua_97.per_kategori, b40 = AK.baseline_14b.berurutan_40.per_kategori;
+  $("#v-akurasi").innerHTML = `<h2 style="margin-top:0">Ketepatan jawaban</h2>
+  <p class="lead">Dinilai otomatis dengan kriteria yang sama persis seperti uji 14B: alat yang benar dipanggil, dan untuk pertanyaan angka, angkanya tertulis di jawaban.</p>
+  <div class="card hero"><p>${esc(DATA.teks.akurasi)}</p></div>
+  <div class="kpis">
+    ${kpi("40 pertanyaan berurutan", `${AK.berurutan_40.sesuai_kriteria.benar}/${AK.berurutan_40.sesuai_kriteria.n}`, "", `14B: ${AK.baseline_14b.berurutan_40.benar}/${AK.baseline_14b.berurutan_40.n}`)}
+    ${kpi("Semua 97 skenario", `${AK.semua_97.sesuai_kriteria.benar}/${AK.semua_97.sesuai_kriteria.n}`, "", `14B: ${AK.baseline_14b.semua_97.benar}/${AK.baseline_14b.semua_97.n}`)}
+    ${kpi("Alat yang dipilih benar", `${AK.semua_97.pilih_alat.benar}/${AK.semua_97.pilih_alat.n}`, "", "dari skenario yang memang butuh alat tertentu")}
+    ${kpi("Isi perintah ke alat benar", `${AK.semua_97.argumen_alat.benar}/${AK.semua_97.argumen_alat.n}`, "", "mis. periode merujuk September 2026")}
+  </div>
+  <div class="card"><h3>Sesuai kriteria per jenis pertanyaan</h3><p class="ket">40 pertanyaan berurutan (5 kali per jenis), supaya sebanding dengan 14B yang juga diuji berurutan.</p>${legModel()}<div class="chart" id="ak-c"></div></div>
+  <div class="card"><h3>Tabel per jenis pertanyaan</h3><div id="ak-t"></div></div>
+  <div class="card"><h3>Galat dan tanda jawaban karangan</h3><div id="ak-g"></div>
+    <p class="ket" style="margin-top:10px">Halusinasi tidak bisa diperiksa otomatis sepenuhnya. Yang dihitung adalah tanda-tandanya: ada angka di jawaban data padahal alat tidak dipanggil, pertanyaan gaji dijawab dengan angka rupiah, dan teks internal antar agent yang sampai ke pengguna.</p></div>`;
+  pasang($("#ak-c"), w => batang(w, { xs: Object.keys(per), xJudul: "jenis pertanyaan", yJudul: "% sesuai kriteria", desimal: 0, aria: "Akurasi per jenis",
+    series: [["a", k => b40[k]?.persen], ["b", k => AK.berurutan_40.per_kategori[k]?.sesuai_kriteria.persen]].map(([kk, fn]) => ({
+      nama: kk === "a" ? "14B" : "27B", warna: W[kk], nilai: Object.keys(per).map(fn),
+      tips: Object.keys(per).map(k => `${k} ${KAT[k]}\n${kk === "a" ? "Qwen3-14B" : "Qwen3.8-27B"}: ${nf(fn(k), 0)}%`) })) }));
+  tabel($("#ak-t"), { judul: "Akurasi per jenis", berkas: "akurasi-27b", cari: false,
+    kol: [{ key: "q", label: "Jenis pertanyaan" }, { key: "b40", label: "27B berurutan" }, { key: "a40", label: "14B berurutan" }, { key: "b97", label: "27B semua 97" },
+      { key: "alat", label: "Alat benar" }, { key: "arg", label: "Isi perintah benar" }, { key: "llm", label: "Panggilan model/pertanyaan", num: true, f: v => nf(v, 2) }],
+    rows: Object.entries(per).map(([k, v]) => { const r = AK.berurutan_40.per_kategori[k] || {}, p = (x) => x && x.n ? `${x.benar}/${x.n}` : "—";
+      return { q: `${k} ${KAT[k]}`, b40: p(r.sesuai_kriteria), a40: b40[k] ? `${b40[k].benar}/${b40[k].n}` : "—", b97: p(v.sesuai_kriteria), alat: p(v.pilih_alat), arg: p(v.argumen_alat), llm: v.panggilan_model_rata }; }) });
+  tabel($("#ak-g"), { judul: "Galat dan tanda karangan", berkas: "galat-27b", cari: false,
+    kol: [{ key: "h", label: "Hal" }, { key: "n", label: "Jumlah", num: true }, { key: "k", label: "Keterangan", wrap: true }],
+    rows: [["Habis waktu (lebih dari 300 dtk)", GH.habis_waktu, "klien berhenti menunggu; model di server masih melanjutkan"],
+      ["Galat", GH.galat, "permintaan gagal sampai ke jawaban"],
+      ["Jawaban kosong", GH.jawaban_kosong, "model selesai tapi tidak menulis apa pun"],
+      ["Panggilan model gagal", GH.panggilan_model_gagal, "satu panggilan HTTP gagal, agent memakai jalur lain"],
+      ["Jawaban terpotong batas konteks", GH.panggilan_terpotong_konteks, `di ${GH.skenario_dengan_panggilan_terpotong_konteks} skenario; batas 8.192 token sudah termasuk pertanyaan + jawaban`],
+      ["Teks internal agent bocor ke pengguna", GH.teks_internal_bocor, "mis. pesan serah-terima antar agent"],
+      ["Pertanyaan gaji dijawab dengan rupiah", GH.q7_menyebut_rupiah, "seharusnya ditolak"],
+      ["Angka di jawaban data tanpa memanggil alat", GH.angka_tanpa_alat_data, "tanda angka karangan"]].map(([h, n, k]) => ({ h, n, k })) });
+}
+
+/* ======================= TOKEN & HAMBATAN */
+function vHambatan() {
+  const kat = Object.keys(KAT).filter(k => BN.per_kategori[k]);
+  $("#v-hambatan").innerHTML = `<h2 style="margin-top:0">Ke mana waktunya habis</h2>
+  <p class="lead">Tiap panggilan model, alat, query database, dan pencarian SOP dicatat waktunya, lalu dijumlahkan per pertanyaan.</p>
+  <div class="card hero"><p>${esc(DATA.teks.hambatan)}</p></div>
+  <div class="kpis">
+    ${kpi("Waktu habis di model", nf(BN.porsi_model_persen, 0), "%", `dari pertanyaan yang selesai normal · alat + database cuma ${nf(BN.porsi_alat_persen, 1)}%`)}
+    ${kpi("Kecepatan menulis", nf(BN.tok_per_dtk_median), "tok/dtk", "nyaris sama di semua panggilan · 14B: ±49")}
+    ${kpi("Antre saat 8 pengguna", nf((S8.antre_vllm_ms || 0) / 1000, 1), "dtk", `per panggilan · saat sepi ${nf((S0.antre_vllm_ms || 0) / 1000, 2)} dtk`)}
+    ${kpi("Token “berpikir”", nf(100 * TOK.reasoning / TOK.keluar, 0), "%", `${nf0(TOK.reasoning)} dari ${nf0(TOK.keluar)} token keluar, tidak dibaca pengguna`)}
+  </div>
+  <div class="card"><h3>Waktu per jenis pertanyaan</h3><p class="ket">Hanya dari pertanyaan yang selesai normal. Pada yang habis waktu, klien berhenti di 300 detik sementara model masih menulis, jadi waktunya tidak utuh.</p><div class="leg"><span><i style="background:var(--w-model)"></i>Model menulis</span><span><i style="background:var(--w-alat)"></i>Alat + database + SOP</span></div><div class="chart" id="hb-c"></div></div>
+  <div class="card"><h3>Token per jenis pertanyaan</h3><div class="chart" id="hb-k"></div></div>
+  <div class="card"><h3>Tabel hambatan per jenis</h3><div id="hb-t"></div></div>
+  <div class="card"><h3>Contoh rinci: dua pertanyaan paling lama</h3><p class="ket">Dibedah per panggilan model, supaya terlihat langkah mana yang memakan waktu.</p><div id="hb-q"></div></div>
+  <div class="card"><h3>Token dibanding 14B</h3><div id="hb-b"></div></div>`;
+  pasang($("#hb-c"), w => tumpuk(w, { kunci: ["model", "alat"], nama: { model: "Model menulis", alat: "Alat + database + SOP" }, satuan: "dtk", xJudul: "detik (rata-rata per pertanyaan)", aria: "Komposisi waktu",
+    rows: kat.map(k => ({ label: `${k} ${KAT[k]}`, bag: { model: BN.per_kategori[k].waktu_model_s, alat: BN.per_kategori[k].waktu_alat_s } })) }));
+  pasang($("#hb-k"), w => batang(w, { xs: kat, xJudul: "jenis pertanyaan", yJudul: "token keluar rata-rata", desimal: 0, aria: "Token keluar per jenis",
+    series: [{ nama: "Token keluar", warna: W.b, nilai: kat.map(k => BN.per_kategori[k].token_keluar), tips: kat.map(k => `${k} ${KAT[k]}\n${nf0(BN.per_kategori[k].token_keluar)} token keluar rata-rata`) }] }));
+  tabel($("#hb-t"), { judul: "Hambatan per jenis", berkas: "hambatan-27b", cari: false,
+    kol: [{ key: "q", label: "Jenis pertanyaan" }, { key: "n", label: "n", num: true }, { key: "habis", label: "Habis waktu", num: true }, { key: "total_s", label: "Total rata (dtk)", num: true, f: v => nf(v) },
+      { key: "waktu_model_s", label: "Model menulis (dtk)", num: true, f: v => nf(v) }, { key: "waktu_alat_s", label: "Alat + DB + SOP (dtk)", num: true, f: v => nf(v, 2) },
+      { key: "token_keluar", label: "Token keluar", num: true, f: nf0 }, { key: "tok_per_dtk", label: "Token/dtk", num: true, f: v => nf(v) },
+      { key: "terpotong", label: "Terpotong konteks", num: true }],
+    rows: kat.map(k => Object.assign({ q: `${k} ${KAT[k]}` }, BN.per_kategori[k])) });
+  $("#hb-q").innerHTML = BN.rinci.map(r => `<h4 style="margin:14px 0 6px">${esc(r.judul)} — total ${nf(r.total_s)} dtk, ${r.n_llm} panggilan model</h4>
+    <div class="tw" style="max-height:none"><table><thead><tr><th>#</th><th>Langkah</th><th class="num">Waktu (dtk)</th><th class="num">Porsi</th><th class="num">Token masuk</th><th class="num">Token keluar</th><th class="num">Berpikir</th><th class="num">Token/dtk</th><th>Berhenti karena</th></tr></thead><tbody>`
+    + r.panggilan.map((c, i) => `<tr><td class="num">${i + 1}</td><td>${esc(c.peran)}</td><td class="num">${nf(c.durasi_s)}</td><td class="num">${nf0(100 * c.durasi_s / r.total_s)}%</td><td class="num">${nf0(c.masuk)}</td><td class="num">${nf0(c.keluar)}</td><td class="num">${nf0(c.reasoning)}</td><td class="num">${nf(c.tok_per_dtk)}</td><td>${c.finish === "length" ? `<span class="no">batas konteks</span> (${nf0((c.masuk || 0) + (c.keluar || 0))} token)` : esc(c.finish)}</td></tr>`).join("")
+    + `</tbody></table></div><p class="ket">Alat + database: ${nf(r.waktu_alat_s, 2)} dtk · menunggu kata pertama: ${nf(r.menunggu_s)} dtk · berpikir: ${nf(r.berpikir_s)} dtk · menulis: ${nf(r.menulis_s)} dtk</p>`).join("");
+  tabel($("#hb-b"), { judul: "Token 14B vs 27B", berkas: "token-14b-27b", cari: false,
+    kol: [{ key: "h", label: "Hal" }, { key: "a", label: "Qwen3-14B", num: true }, { key: "b", label: "Qwen3.8-27B", num: true }],
+    rows: [["Panggilan model (97 skenario)", TOK14.panggilan, TOK.panggilan], ["Token masuk", TOK14.masuk, TOK.masuk], ["Token keluar", TOK14.keluar, TOK.keluar],
+      ["Token masuk per pertanyaan", TOK14.per_workflow.masuk, TOK.per_workflow.masuk], ["Token keluar per pertanyaan", TOK14.per_workflow.keluar, TOK.per_workflow.keluar],
+      ["Token berpikir (dilaporkan terpisah)", null, TOK.reasoning]].map(([h, a, b]) => ({ h, a: a == null ? "—" : nf0(a), b: nf0(b) })) });
+}
+
+/* ======================= BIAYA */
+function vBiaya() {
+  const CB = COST.biaya_alokasi, CM = COST.biaya_marginal_inferensi, CS = COST.biaya_sibuk_vs_menganggur, T = COST.tarif;
+  const rp = u => `Rp ${nf0(u * COST.kurs_idr_per_usd)}`;
+  $("#v-biaya").innerHTML = `<h2 style="margin-top:0">Biaya server</h2>
+  <p class="lead">Tarif resmi AWS untuk ${esc(T.instance)} on-demand Linux di ${esc(T.lokasi)}: <b>USD ${T.usd_per_jam}/jam</b>. Belum termasuk ${esc(T.tidak_termasuk)}</p>
+  <div class="kpis">
+    ${kpi("Biaya uji ini", `$${nf(CB.usd_jendela_benchmark, 2)}`, "", `${nf(COST.durasi.jam_benchmark, 2)} jam · ${rp(CB.usd_jendela_benchmark)}`)}
+    ${kpi("Per pertanyaan sesuai kriteria", `$${nf(CB.usd_per_workflow_berhasil, 3)}`, "", `kalau server dipakai penuh: $${nf(CM.usd_per_workflow_berhasil_saat_penuh, 3)}`)}
+    ${kpi("Per 1 juta token", `$${nf(CB.usd_per_1juta_token_diproses, 2)}`, "", "token masuk + keluar")}
+    ${kpi("GPU sibuk saat uji", nf(CS.gpu_util_rata_persen), "%", `porsi menganggur ±$${nf(CS.usd_porsi_menganggur, 2)}`)}
+  </div>
+  <div class="card"><h3>Rincian biaya</h3><div id="by-t"></div>
+    <p class="ket" style="margin-top:10px"><b>Biaya alokasi vs biaya tambahan.</b> AWS menagih server per jam menyala, sibuk atau menganggur. Jadi biaya satu pertanyaan bukan lamanya dikali tarif. Selama server sudah menyala dan kapasitasnya belum penuh, satu pertanyaan tambahan hampir tidak menambah tagihan.</p></div>
+  <div class="card"><h3>Perkiraan biaya bulanan</h3><div id="by-b"></div>
+    <p class="ket" style="margin-top:10px">Kapasitas dihitung dari throughput terbaik yang terukur (${nf(CM.throughput_terbaik_workflow_per_jam)} pertanyaan/jam). Itu angka maksimum, bukan yang pasti tercapai.</p></div>
+  <div class="card"><h3>Biaya dibanding 14B</h3><div id="by-m"></div>
+    <p class="ket" style="margin-top:10px">Server dan tarifnya sama persis. Yang berbeda cuma berapa banyak pertanyaan yang selesai per jam, jadi perbandingan biayanya mengikuti perbandingan throughput.</p></div>`;
+  tabel($("#by-t"), { judul: "Rincian biaya", berkas: "biaya-27b", cari: false, kol: [{ key: "h", label: "Hal", wrap: true }, { key: "v", label: "Nilai", num: true }],
+    rows: [["Tarif server per jam", `$${T.usd_per_jam} (${rp(T.usd_per_jam)})`], ["Lama uji", `${nf(COST.durasi.jam_benchmark, 2)} jam`],
+      ["Biaya EC2 selama uji", `$${nf(CB.usd_jendela_benchmark, 2)}`], ["Instance menyala sampai uji selesai", `${nf(COST.durasi.jam_instance_aktif_sampai_uji_selesai, 2)} jam = $${nf(CB.usd_instance_sampai_uji_selesai, 2)}`],
+      ["Per 1 juta token diproses", `$${nf(CB.usd_per_1juta_token_diproses, 2)}`], ["Per pertanyaan (semua)", `$${nf(CB.usd_per_workflow, 3)}`],
+      ["Per pertanyaan yang selesai", `$${nf(CB.usd_per_workflow_selesai, 3)}`], ["Per pertanyaan sesuai kriteria", `$${nf(CB.usd_per_workflow_berhasil, 3)}`],
+      ["Throughput terbaik terukur", `${nf(CM.throughput_terbaik_workflow_per_jam)} pertanyaan/jam`],
+      ["Per pertanyaan sesuai kriteria bila server penuh", `$${nf(CM.usd_per_workflow_berhasil_saat_penuh, 3)}`]].map(([h, v]) => ({ h, v })) });
+  tabel($("#by-b"), { judul: "Biaya bulanan", berkas: "biaya-bulanan", cari: false,
+    kol: [{ key: "s", label: "Skenario pemakaian" }, { key: "j", label: "Jam/bulan", num: true }, { key: "u", label: "USD", num: true, f: v => `$${nf0(v)}` }, { key: "r", label: "Rupiah", num: true }, { key: "k", label: "Kapasitas maks (pertanyaan)", num: true, f: nf0 }],
+    rows: Object.entries(COST.biaya_bulanan).map(([s, v]) => ({ s, j: v.jam, u: v.usd, r: rp(v.usd), k: v.kapasitas_workflow_maks })) });
+  const t27 = S8.workflow_per_menit, t14 = S8b.workflow_per_menit;
+  tabel($("#by-m"), { judul: "Biaya per pertanyaan 14B vs 27B", berkas: "biaya-banding", cari: false,
+    kol: [{ key: "h", label: "Hal" }, { key: "a", label: "Qwen3-14B" }, { key: "b", label: "Qwen3.8-27B" }],
+    rows: [{ h: "Server", a: T.instance, b: T.instance }, { h: "Tarif per jam", a: `$${T.usd_per_jam}`, b: `$${T.usd_per_jam}` },
+      { h: "Pertanyaan selesai per menit (8 pengguna)", a: nf(t14, 2), b: nf(t27, 2) },
+      { h: "Pertanyaan selesai per jam", a: nf0(t14 * 60), b: nf0(t27 * 60) },
+      { h: "Biaya per pertanyaan saat server penuh", a: `$${nf(T.usd_per_jam / (t14 * 60), 3)}`, b: `$${nf(T.usd_per_jam / (t27 * 60), 3)}` },
+      { h: "Selisih biaya", a: "acuan", b: `${nf(t14 / t27, 1)}× lebih mahal` }] });
+}
+
+/* ======================= NAVIGASI */
+const VIEWS = [["banding", "Perbandingan 14B vs 27B", vBanding], ["hasil", "Hasil & performa", vHasil],
+  ["akurasi", "Akurasi", vAkurasi], ["hambatan", "Token & hambatan", vHambatan], ["biaya", "Biaya server", vBiaya]];
+const IKON = '<path d="M4 6h16M4 12h16M4 18h10"/>';
+const SUDAH = {};
+function buka(id, hash = true) {
+  if (!VIEWS.some(v => v[0] === id)) id = "banding";
+  VIEWS.forEach(([k]) => { $("#v-" + k).hidden = k !== id; });
+  document.querySelectorAll("[data-view]").forEach(b => { if (b.dataset.view === id) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
+  if (!SUDAH[id]) { VIEWS.find(v => v[0] === id)[2](); SUDAH[id] = true; } else GRAFIK.forEach(gambarUlang);
+  if (hash) history.replaceState(null, "", "#" + id);
+}
+$("#nav").innerHTML = VIEWS.map(([k, t]) => `<button type="button" data-view="${k}"><svg viewBox="0 0 24 24" aria-hidden="true">${IKON}</svg>${t}</button>`).join("");
+$("#mtabs").innerHTML = VIEWS.map(([k, t]) => `<button type="button" data-view="${k}">${t}</button>`).join("");
+$("#sub").textContent = `${CFG.model} · ${CFG.mesin} · diuji ${CFG.tanggal} · pembanding Qwen3-14B ${CFG.tanggal_14b}`;
+document.addEventListener("click", e => { const b = e.target.closest("[data-view]"); if (b) { buka(b.dataset.view); scrollTo({ top: 0 }); } });
+addEventListener("hashchange", () => buka(decodeURIComponent(location.hash.slice(1)), false));
+const temaBtn = $("#tema");
+function pasangTema(t) { document.documentElement.dataset.theme = t; temaBtn.textContent = t === "dark" ? "Tema terang" : "Tema gelap"; temaBtn.setAttribute("aria-pressed", t === "dark"); try { localStorage.setItem("tema-dashboard", t); } catch (e) { } GRAFIK.forEach(gambarUlang); }
+temaBtn.addEventListener("click", () => pasangTema(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
+pasangTema(document.documentElement.dataset.theme === "dark" ? "dark" : "light");
+function renderSemua() { VIEWS.forEach(([k, , f]) => { if (!SUDAH[k]) { const el = $("#v-" + k), h = el.hidden; el.hidden = false; f(); SUDAH[k] = true; el.hidden = h; } }); }
+$("#cetak").addEventListener("click", () => { renderSemua(); setTimeout(() => print(), 50); });
+addEventListener("beforeprint", () => { renderSemua(); VIEWS.forEach(([k]) => { const el = $("#v-" + k); el.dataset.hid = el.hidden; el.hidden = false; }); GRAFIK.forEach(g => { g.el.innerHTML = g.gambar(1000); }); });
+addEventListener("afterprint", () => { VIEWS.forEach(([k]) => { const el = $("#v-" + k); el.hidden = el.dataset.hid === "true"; }); GRAFIK.forEach(gambarUlang); });
+$("#foot").innerHTML = `Laporan tetap, dibuat ${esc(DATA.dibuat)} oleh <code>scripts/laporan-27b.py</code> dari ${esc(DATA.folder)}/. Halaman ini tidak terhubung ke server mana pun, dan tidak memuat isi jawaban model.`;
+buka(decodeURIComponent(location.hash.slice(1)) || "banding", false);
+</script>
+</body>
+</html>

@@ -37,7 +37,7 @@
  * Konsekuensi teknisnya juga beda: `alamatBifrost()` menunjuk gateway kantor,
  * sedangkan Qwen punya URL, kunci, dan timeout sendiri di `.env.local`.
  */
-export type Penyedia = "anthropic" | "lokal" | "server" | "qwen";
+export type Penyedia = "anthropic" | "lokal" | "server" | "gateway" | "qwen";
 
 export type PilihanModel = {
   id: string;
@@ -65,10 +65,11 @@ export type PilihanModel = {
  * Penyedia yang tidak terdaftar di sini tidak akan muncul di mana-mana --
  * `npm run test:biaya` menjaganya.
  */
-export const URUTAN_PENYEDIA = ["anthropic", "server", "qwen", "lokal"] as const;
+export const URUTAN_PENYEDIA = ["anthropic", "gateway", "server", "qwen", "lokal"] as const;
 
 export const NAMA_PENYEDIA: Record<Penyedia, string> = {
   anthropic: "Claude (cloud)",
+  gateway: "MR AI Gateway",
   server: "Lokal server kantor",
   // ⚠️ TIDAK ditulis "lokal". Qwen 14B jalan di Google Colab lewat tunnel
   // Cloudflare — pertanyaan dan hasil query perusahaan melewati pihak ketiga.
@@ -79,6 +80,34 @@ export const NAMA_PENYEDIA: Record<Penyedia, string> = {
 };
 
 export const MODEL_TERSEDIA: PilihanModel[] = [
+  {
+    // ID ini sengaja berupa alias portal. Nama deployment sebenarnya dibaca
+    // dari AI_MODEL hanya di server agar konfigurasi gateway tidak masuk ke browser.
+    id: "mr-ai-gateway",
+    label: "Qwen3 14B (Gateway)",
+    penyedia: "gateway",
+    keterangan: "Melalui MR AI Gateway lokal — gratis dan tidak membebani komputer pengguna",
+    harga: null,
+  },
+  {
+    // Model kedua di gateway yang sama, dengan key sendiri (11 Nov 2026).
+    // Konteksnya 16.384 token, dua kali Qwen3 14B, jadi boleh membawa lebih banyak tool.
+    id: "mr-ai-gateway-qwen35",
+    label: "Qwen3.5 35B (Gateway)",
+    penyedia: "gateway",
+    keterangan: "Melalui MR AI Gateway — model lebih besar, konteks 16K, gratis",
+    harga: null,
+  },
+  {
+    // Model yang SAMA dengan "mr-ai-gateway" (Qwen3 14B), di mesin 4 GPU (17 Nov 2026).
+    // Alamat, nama deployment, dan key dibaca dari AI_BASE_URL_2 / AI_MODEL_2 / AI_API_KEY_2,
+    // hanya di server. Untuk pengujian 1 GPU vs 4 GPU; pilihan lama tidak berubah.
+    id: "mr-ai-gateway-4gpu",
+    label: "Qwen3 14B (4 GPU)",
+    penyedia: "gateway",
+    keterangan: "Qwen3 14B yang sama di AWS g5.12xlarge (4x A10G, 4 replika) — untuk pengujian, gratis",
+    harga: null,
+  },
   {
     id: "claude-sonnet-5",
     label: "Sonnet 5",
@@ -209,7 +238,7 @@ export const MODEL_TERSEDIA: PilihanModel[] = [
   //   Sudah dicoba dua kali dengan dua sebab berbeda. Jangan diulang.
 ];
 
-export const MODEL_DEFAULT = MODEL_TERSEDIA[0].id;
+export const MODEL_DEFAULT = "claude-sonnet-5";
 
 /** Kembalikan model kalau ada di whitelist; kalau tidak, pakai default. */
 export function ambilModel(kandidat: unknown): PilihanModel {
@@ -236,6 +265,118 @@ export function alamatOllama(): string {
 /** Alamat gateway model server kantor. */
 export function alamatBifrost(): string {
   return process.env.BIFROST_URL ?? "";
+}
+
+/**
+ * Endpoint OpenAI-compatible gateway untuk model itu (bawaan: MR AI Gateway, `AI_BASE_URL`).
+ * Kalau alamatnya tanpa path (mis. `https://host`), `/v1` ditambahkan: LiteLLM melayani API
+ * OpenAI di `/v1`, dan `AI_BASE_URL_2` ditulis tanpa path.
+ */
+export function alamatGateway(id?: string): string {
+  const mentah = (process.env[envGateway(id).url] ?? "").trim().replace(/\/+$/, "");
+  if (!mentah) return "";
+  try {
+    return new URL(mentah).pathname === "/" ? `${mentah}/v1` : mentah;
+  } catch {
+    return mentah;
+  }
+}
+
+/**
+ * Tiap model gateway membawa ALAMAT, nama deployment, dan key SENDIRI.
+ *
+ * ⚠️ Key per model, bukan satu key bersama: virtual key LiteLLM dibatasi ke model tertentu
+ * (key Qwen3.5 hanya melihat `qwen35-35b`), jadi memakai key yang salah ditolak gateway.
+ * Yang disimpan di sini NAMA variabel env, bukan isinya, supaya tidak ada nilai rahasia
+ * yang bisa ikut ke bundel browser.
+ *
+ * `mr-ai-gateway-4gpu` (17 Nov 2026): model yang SAMA (Qwen3 14B AWQ) di mesin lain —
+ * AWS g5.12xlarge, 4x A10G, 4 replika vLLM di belakang LiteLLM (`simple-shuffle`). Dipisah
+ * sebagai pilihan sendiri supaya `mr-ai-gateway` (1 GPU) tetap bisa dipakai sebagai pembanding.
+ */
+const ENV_GATEWAY: Record<string, { url: string; model: string; key: string; maksTool: string; bawaanTool: number }> = {
+  "mr-ai-gateway": { url: "AI_BASE_URL", model: "AI_MODEL", key: "AI_API_KEY", maksTool: "MAKS_TOOL_GATEWAY", bawaanTool: 10 },
+  "mr-ai-gateway-qwen35": {
+    url: "AI_BASE_URL", model: "AI_MODEL_QWEN35", key: "AI_API_KEY_QWEN35", maksTool: "MAKS_TOOL_GATEWAY_QWEN35", bawaanTool: 15,
+  },
+  "mr-ai-gateway-4gpu": { url: "AI_BASE_URL_2", model: "AI_MODEL_2", key: "AI_API_KEY_2", maksTool: "MAKS_TOOL_GATEWAY_2", bawaanTool: 10 },
+};
+const MODEL_GATEWAY_BAWAAN = "mr-ai-gateway";
+const envGateway = (id?: string) => ENV_GATEWAY[id ?? MODEL_GATEWAY_BAWAAN] ?? ENV_GATEWAY[MODEL_GATEWAY_BAWAAN];
+
+/** Nama deployment model di balik alias pilihan portal. */
+export function modelGateway(id?: string): string {
+  return process.env[envGateway(id).model]?.trim() || "qwen3-14b";
+}
+
+/** Key gateway untuk model itu. Hanya dibaca di server. */
+export function kunciGateway(id?: string): string {
+  return process.env[envGateway(id).key] ?? "";
+}
+
+/**
+ * Batas jumlah tool per model gateway, supaya instruksi, tool, dan hasil RAG muat di konteksnya.
+ * Qwen3 14B (8.192 token) bawaannya 10, Qwen3.5 35B (16.384 token) 15.
+ */
+export function maksToolGatewayModel(id?: string): number {
+  const e = envGateway(id);
+  const n = Number(process.env[e.maksTool]);
+  return Number.isInteger(n) && n > 0 ? n : e.bawaanTool;
+}
+
+/** Gateway hanya ditawarkan jika URL, kunci, dan nama model tersedia. */
+export function gatewayDisetel(id?: string): boolean {
+  const url = alamatGateway(id);
+  const e = envGateway(id);
+  if (!url || !process.env[e.key] || !process.env[e.model]) return false;
+  try {
+    const u = new URL(url);
+    return u.protocol === "https:" || u.hostname === "localhost" || u.hostname === "127.0.0.1";
+  } catch {
+    return false;
+  }
+}
+
+/** Pemeriksaan ringan sebelum permintaan agent dijalankan. */
+export async function gatewayHidup(id?: string): Promise<boolean> {
+  if (!gatewayDisetel(id)) return false;
+  try {
+    const r = await fetch(`${alamatGateway(id)}/models`, {
+      headers: { Authorization: `Bearer ${kunciGateway(id)}` },
+      signal: AbortSignal.timeout(5_000),
+    });
+    return r.ok;
+  } catch {
+    return false;
+  }
+}
+
+/** Terjemahkan kegagalan kemampuan tool pada model di MR AI Gateway. */
+export function pesanGalatGateway(galat: unknown): string | null {
+  const teks = galat instanceof Error ? galat.message : String(galat);
+  const isi = teks + JSON.stringify((galat as { responseBody?: unknown })?.responseBody ?? "");
+  if (/enable-auto-tool-choice|tool-call-parser|auto.*tool choice/i.test(isi)) {
+    return (
+      "Model gateway sudah terhubung, tetapi server model belum mengaktifkan pemanggilan tool otomatis. " +
+      "Ratu AI memerlukan kemampuan ini untuk meneruskan pertanyaan ke agen aplikasi. " +
+      "Aktifkan auto tool choice dan tool call parser pada inference server, lalu coba kembali."
+    );
+  }
+  // Sambungan ke gateway putus sebelum ada balasan, dan retry sekali di `lib/gateway-fetch.ts`
+  // juga gagal. Hanya untuk permintaan ke alamat gateway: galat sambungan ke penyedia lain
+  // punya penyebab dan sarannya sendiri.
+  const url = (galat as { url?: unknown })?.url;
+  const alamatSemua = [...new Set(Object.keys(ENV_GATEWAY).map((id) => alamatGateway(id)).filter(Boolean))];
+  const keGateway = typeof url === "string" && alamatSemua.some((a) => url.startsWith(a));
+  const kode = /\b(ECONNRESET|ECONNREFUSED|EPIPE|ETIMEDOUT|UND_ERR_SOCKET)\b/.exec(isi)?.[1];
+  if (keGateway && kode) {
+    return (
+      `Sambungan ke MR AI Gateway terputus (${kode}) dan percobaan ulang otomatis juga gagal. ` +
+      "Kirim ulang pertanyaannya. Kalau berulang, periksa tunnel SSH ke gateway masih berjalan. " +
+      "Rancangan yang belum disimpan tidak ikut tersimpan, jadi tidak ada data yang dobel."
+    );
+  }
+  return null;
 }
 
 /** Alamat endpoint Qwen di Colab. Kosong kalau belum disetel. */
@@ -281,7 +422,10 @@ export function qwenDisetel(): boolean {
  * model itu kini dimatikan.
  */
 export function modelDitawarkan(): PilihanModel[] {
-  return MODEL_TERSEDIA.filter((m) => m.penyedia !== "qwen" || qwenDisetel());
+  return MODEL_TERSEDIA.filter((m) =>
+    (m.penyedia !== "qwen" || qwenDisetel()) &&
+    (m.penyedia !== "gateway" || gatewayDisetel(m.id)),
+  );
 }
 
 /**

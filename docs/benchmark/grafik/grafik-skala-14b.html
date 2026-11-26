@@ -1,0 +1,573 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Ratu AI — Kapasitas Qwen3-14B</title>
+<script>try{var t=localStorage.getItem('tema-dashboard');if(t==='dark'||t==='light')document.documentElement.dataset.theme=t}catch(e){}</script>
+<style>
+
+:root{
+  --bg:#f6f7f9;--surface:#ffffff;--surface2:#f1f3f6;--ink:#0f172a;--ink2:#475569;--ink3:#64748b;--line:#e2e8f0;--grid:#e8ecf1;
+  --accent:#4f46e5;--accent-ink:#3730a3;--accent-soft:#eef0ff;
+  --good:#15803d;--good-soft:#e7f6ec;--bad:#b42318;--bad-soft:#fdecea;--warn:#a15c07;--warn-soft:#fdf3e1;
+  --b2p:#d97706;--b2s:#9a3412;--b3:#0f9d76;--b4:#4f46e5;
+  --w-persiapan:#8b5cf6;--w-tunggu:#94a3b8;--w-berpikir:#ea580c;--w-rencana:#0d9488;--w-menulis:#2563eb;--w-ekor:#cbd5e1;--w-alat:#ca8a04;--w-lain:#475569;
+  --pita:#eef1f5;--shadow:0 1px 2px rgba(15,23,42,.05),0 1px 3px rgba(15,23,42,.04);
+  color-scheme:light;
+}
+:root[data-theme="dark"]{
+  --bg:#0b0f17;--surface:#121826;--surface2:#182033;--ink:#e6e9ef;--ink2:#a8b1c2;--ink3:#8691a5;--line:#232c3d;--grid:#1f2737;
+  --accent:#8b8ff9;--accent-ink:#c7c9ff;--accent-soft:#1d2140;
+  --good:#4ade80;--good-soft:#11291b;--bad:#f87171;--bad-soft:#2e1416;--warn:#fbbf24;--warn-soft:#2b210d;
+  --b2p:#f59e0b;--b2s:#fb8a5a;--b3:#34d399;--b4:#8b8ff9;
+  --w-persiapan:#a78bfa;--w-tunggu:#64748b;--w-berpikir:#f97316;--w-rencana:#2dd4bf;--w-menulis:#60a5fa;--w-ekor:#334155;--w-alat:#facc15;--w-lain:#94a3b8;
+  --pita:#18202f;--shadow:none;color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--bg);color:var(--ink);font:14px/1.55 system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;-webkit-font-smoothing:antialiased}
+button,select,input{font:inherit;color:inherit}
+a{color:var(--accent)}
+.skip{position:absolute;left:-999px;top:8px;background:var(--surface);padding:8px 12px;border-radius:8px;z-index:50}
+.skip:focus{left:8px}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.app{display:grid;grid-template-columns:236px minmax(0,1fr);min-height:100vh}
+/* sidebar */
+.side{position:sticky;top:0;height:100vh;overflow:auto;background:var(--surface);border-right:1px solid var(--line);padding:20px 14px;display:flex;flex-direction:column;gap:18px}
+.brand{display:flex;gap:10px;align-items:center;padding:0 6px}
+.brand .logo{width:30px;height:30px;border-radius:8px;background:var(--accent);display:grid;place-items:center;color:#fff;font-weight:700;font-size:14px}
+.brand b{display:block;font-size:14px}.brand small{color:var(--ink3);font-size:12px}
+.nav{display:flex;flex-direction:column;gap:2px}
+.nav button{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:0;background:none;padding:9px 10px;border-radius:8px;cursor:pointer;color:var(--ink2);font-weight:500}
+.nav button:hover{background:var(--surface2);color:var(--ink)}
+.nav button[aria-current="page"]{background:var(--accent-soft);color:var(--accent-ink);font-weight:600}
+.nav svg{width:17px;height:17px;flex:none;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.side .grup{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink3);padding:0 10px;margin-bottom:4px}
+.side .bawah{margin-top:auto;display:flex;flex-direction:column;gap:2px}
+/* main */
+main{min-width:0;padding:28px 32px 56px;max-width:1240px;width:100%;overflow-wrap:anywhere}
+.top{display:flex;flex-wrap:wrap;gap:12px 20px;align-items:flex-start;justify-content:space-between;margin-bottom:20px}
+.top h1{font-size:26px;line-height:1.2;margin:0 0 4px;letter-spacing:-.01em}
+.top .sub{color:var(--ink2);margin:0}
+.badges{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.badge{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:3px 9px;border-radius:999px;background:var(--surface2);color:var(--ink2);border:1px solid var(--line)}
+.badge.hist::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--ink3)}
+.badge.agent{background:var(--accent-soft);color:var(--accent-ink);border-color:transparent}
+.badge.direct{background:var(--good-soft);color:var(--good);border-color:transparent}
+.aksi{display:flex;gap:8px;flex-wrap:wrap}
+.btn{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 12px;cursor:pointer;color:var(--ink2);font-weight:500;display:inline-flex;gap:6px;align-items:center}
+.btn:hover{color:var(--ink);border-color:var(--ink3)}
+.btn svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.8}
+.mtabs{display:none}
+.view[hidden]{display:none}
+.subnav{display:flex;flex-direction:column;gap:1px;margin:2px 0 8px 18px;padding-left:10px;border-left:2px solid var(--line)}
+.nav .subnav button{display:block;padding:5px 8px;font-size:12.5px;font-weight:400;color:var(--ink2);border-radius:6px;line-height:1.35;white-space:normal}
+.nav .subnav button.l3{padding-left:16px;font-size:12px;color:var(--ink3)}
+.nav .subnav button.aktif{color:var(--accent-ink);background:var(--accent-soft);font-weight:600}
+.lompat{display:none}
+.emb iframe{display:block;width:100%;height:80vh;border:0;background:var(--bg)}
+.nav .grup{margin:14px 0 4px}
+.gbox{margin:2px 0}.gbox+.gbox{margin-top:6px}.gsolo{margin-bottom:8px}
+.ghead{display:flex;align-items:center;gap:8px;width:100%;text-align:left;border:0;background:none;padding:8px 10px;border-radius:8px;cursor:pointer;color:var(--ink2)}
+.ghead:hover{background:var(--surface2)}.ghead b{font-size:12.5px;font-weight:650;display:block;color:var(--ink)}
+.ghead .tgl{display:block;font-size:10.5px;color:var(--ink3);font-weight:400}
+.chev{width:14px;height:14px;flex:0 0 14px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;transition:transform .15s}
+.gbox.buka>.ghead .chev{transform:rotate(90deg)}
+.gisi{display:none;padding-left:6px;border-left:2px solid var(--line);margin-left:16px}
+.gbox.buka>.gisi,.gsolo>.gisi{display:block}
+.subjudul{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--ink3);padding:10px 10px 3px}
+@media print{.gisi{display:block}}
+.nav .grup:first-child{margin-top:0}
+.nav .tgl{display:block;font-size:10.5px;text-transform:none;letter-spacing:0;color:var(--ink3);font-weight:400}
+.mtabs .sep{flex:none;align-self:center;font-size:11px;color:var(--ink3);padding:0 2px 0 8px;white-space:nowrap}
+.rilis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:14px 0}
+.rilis .card{margin:0;display:flex;flex-direction:column;gap:8px}
+.rilis .card.baru{border-left:4px solid var(--accent)}
+.rilis .tgl{font-size:12px;color:var(--ink3);margin:0}
+.rilis ul{margin:0;padding-left:18px;color:var(--ink2);font-size:13.5px}
+.rilis .angka{display:flex;gap:16px;flex-wrap:wrap;margin:2px 0}
+.rilis .angka div{display:flex;flex-direction:column}
+.rilis .angka b{font-size:20px;font-variant-numeric:tabular-nums}
+.rilis .angka span{font-size:12px;color:var(--ink2)}
+.rilis .ke{display:flex;flex-wrap:wrap;gap:6px;margin-top:auto;padding-top:6px}
+@media (max-width:1100px){.rilis{grid-template-columns:minmax(0,1fr)}}
+h2{font-size:18px;margin:30px 0 4px;letter-spacing:-.005em}
+h3{font-size:15px;margin:0 0 4px}
+.lead{color:var(--ink2);margin:0 0 14px;max-width:880px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:18px 20px;box-shadow:var(--shadow);margin:14px 0}
+.card .ket{color:var(--ink2);font-size:13px;margin:0 0 10px}
+.src{color:var(--ink3);font-size:12px;margin:10px 0 0}
+.grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+.grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.grid2>.card,.grid3>.card{margin:0;min-width:0}
+.card{min-width:0}
+.hero{background:linear-gradient(0deg,var(--surface),var(--surface));border-left:4px solid var(--accent)}
+.hero p{margin:0 0 8px;font-size:15px;max-width:920px}
+.hero .batas{color:var(--ink3);font-size:13px;margin:0}
+.kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:14px 0}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:2px;min-width:0}
+.kpi .l{font-size:12.5px;color:var(--ink2);font-weight:500}
+.kpi .v{font-size:27px;font-weight:700;letter-spacing:-.02em;line-height:1.25;font-variant-numeric:tabular-nums}
+.kpi .v small{font-size:14px;font-weight:600;color:var(--ink2);margin-left:3px}
+.kpi .k{font-size:12px;color:var(--ink3)}
+.delta{display:inline-block;font-size:12px;font-weight:600;padding:2px 8px;border-radius:10px;max-width:100%;margin-top:6px;align-self:flex-start;line-height:1.4}
+.delta.good{background:var(--good-soft);color:var(--good)}.delta.bad{background:var(--bad-soft);color:var(--bad)}.delta.netral{background:var(--surface2);color:var(--ink2)}
+.list{margin:0;padding-left:18px}.list li{margin:5px 0}
+.ctl{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;margin:4px 0 12px}
+.ctl .lbl{font-size:12px;color:var(--ink3);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.seg{display:inline-flex;flex-wrap:wrap;border:1px solid var(--line);border-radius:9px;padding:2px;background:var(--surface2);gap:2px}
+.seg button{border:0;background:none;padding:5px 11px;border-radius:7px;cursor:pointer;color:var(--ink2);font-size:13px;font-weight:500}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow);font-weight:600}
+.chk{display:inline-flex;align-items:center;gap:6px;font-size:13px;color:var(--ink2);cursor:pointer;padding:3px 8px 3px 6px;border-radius:7px;border:1px solid var(--line);background:var(--surface)}
+.chk input{accent-color:var(--accent)}
+.chk i,.leg i{display:inline-block;width:10px;height:10px;border-radius:3px}
+select{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:5px 8px}
+.leg{display:flex;flex-wrap:wrap;gap:4px 16px;font-size:12.5px;color:var(--ink2);margin:2px 0 6px}
+.leg span{display:inline-flex;align-items:center;gap:6px}
+.chart{width:100%;min-height:40px}
+.chart svg{display:block;width:100%;height:auto;overflow:visible}
+.chart .gl{stroke:var(--grid)}.chart .ax{fill:var(--ink3);font-size:11px}.chart .axt{fill:var(--ink2);font-size:11.5px}
+.chart .el{fill:var(--ink);font-size:11px;font-weight:600}
+.chart .ref{stroke:var(--ink3);stroke-dasharray:4 4}
+.chart .pt{cursor:pointer}
+.chart .band{fill:var(--pita)}
+.interpret{background:var(--accent-soft);color:var(--ink);border-radius:9px;padding:10px 13px;font-size:13.5px;margin:12px 0 0}
+.interpret b{color:var(--accent-ink)}
+.caveat{background:var(--warn-soft);border-radius:9px;padding:10px 13px;font-size:13.5px;margin:10px 0}
+.caveat b{color:var(--warn)}
+.na{color:var(--ink3);font-style:italic}
+details.raw{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+details.raw>summary{cursor:pointer;color:var(--accent);font-weight:600;font-size:13px;list-style:none;display:inline-flex;gap:6px;align-items:center}
+details.raw>summary::-webkit-details-marker{display:none}
+details.raw>summary::before{content:"▸";transition:transform .15s}
+details.raw[open]>summary::before{transform:rotate(90deg)}
+.tblbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:10px 0 6px}
+.tblbar input{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:5px 10px;min-width:0;width:220px;max-width:100%}
+.tblbar .n{color:var(--ink3);font-size:12px;margin-left:auto}
+.tw{overflow:auto;max-height:520px;border:1px solid var(--line);border-radius:9px}
+table{border-collapse:collapse;width:100%;font-size:13px;font-variant-numeric:tabular-nums}
+th,td{padding:7px 10px;border-bottom:1px solid var(--grid);text-align:left;white-space:nowrap}
+td.num,th.num{text-align:right}
+thead th{position:sticky;top:0;background:var(--surface2);color:var(--ink2);font-weight:600;z-index:1}
+th button{all:unset;cursor:pointer;display:inline-flex;gap:4px;align-items:center}
+th button::after{content:"↕";color:var(--ink3);font-size:11px}
+th[aria-sort="ascending"] button::after{content:"↑";color:var(--accent)}
+th[aria-sort="descending"] button::after{content:"↓";color:var(--accent)}
+tbody tr:hover{background:var(--surface2)}
+td.wrap{white-space:normal;min-width:220px}
+.ok{color:var(--good);font-weight:600}.no{color:var(--bad);font-weight:600}.warn{color:var(--warn);font-weight:600}
+#tip{position:fixed;z-index:60;pointer-events:none;background:var(--ink);color:var(--bg);font-size:12px;line-height:1.45;padding:8px 10px;border-radius:8px;max-width:320px;white-space:pre-line;display:none;box-shadow:0 6px 20px rgba(0,0,0,.18)}
+/* drawer */
+.scrim{position:fixed;inset:0;background:rgba(15,23,42,.35);z-index:40}
+.scrim[hidden]{display:none}
+.drawer{position:fixed;top:0;right:0;height:100vh;width:min(720px,100vw);background:var(--surface);z-index:41;overflow:auto;padding:22px 24px 40px;border-left:1px solid var(--line);box-shadow:-10px 0 30px rgba(0,0,0,.15)}
+.drawer[hidden]{display:none}
+.drawer .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.drawer h2{margin:0}
+dl.gloss{display:grid;grid-template-columns:150px 1fr;gap:8px 16px;margin:12px 0}
+dl.gloss dt{font-weight:700}dl.gloss dd{margin:0;color:var(--ink2)}
+.foot{color:var(--ink3);font-size:12px;margin-top:36px;border-top:1px solid var(--line);padding-top:14px}
+@media (max-width:1100px){.grid3,.kpis{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:900px){
+.lompat{display:block;position:fixed;right:12px;bottom:12px;z-index:30;max-width:calc(100vw - 24px);padding:9px 12px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-weight:600;box-shadow:var(--shadow)}
+.lompat:empty{display:none}
+  .app{grid-template-columns:minmax(0,1fr)}
+  .side{display:none}
+  main{padding:16px 16px 48px}
+  .mtabs{display:flex;gap:4px;overflow-x:auto;position:sticky;top:0;z-index:20;background:var(--bg);padding:8px 0;margin:0 0 10px;border-bottom:1px solid var(--line)}
+  .mtabs button{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 12px;font-size:13px;color:var(--ink2);cursor:pointer}
+  .mtabs button[aria-current="page"]{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .grid2,.grid3{grid-template-columns:minmax(0,1fr)}
+  .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .top h1{font-size:22px}
+  .kpi .v{font-size:23px}
+  dl.gloss{grid-template-columns:1fr}
+}
+@media (max-width:520px){.kpis{grid-template-columns:1fr}}
+@media print{
+  .side,.mtabs,.aksi,.ctl,.tblbar,#tip,.scrim,.drawer,.lompat{display:none!important}
+  .app{display:block} main{max-width:none;padding:0}
+  .view[hidden]{display:block!important}
+  .view{break-before:page}
+  .view:first-of-type{break-before:auto}
+  .card,.kpi{box-shadow:none;break-inside:avoid}
+  details.raw{display:none}
+  .tw{max-height:none;overflow:visible}
+  body{background:#fff}
+}
+
+:root{--k4:#4f46e5;--k8:#d97706;--r0:#0f9d76;--r1:#2563eb;--r2:#d97706;--r3:#db2777}
+:root[data-theme="dark"]{--k4:#8b8ff9;--k8:#f59e0b;--r0:#34d399;--r1:#60a5fa;--r2:#f59e0b;--r3:#f472b6}
+</style>
+</head>
+<body>
+<a class="skip" href="#isi">Lewati ke konten</a>
+<div class="app">
+  <aside class="side" aria-label="Navigasi">
+    <div class="brand"><div class="logo" aria-hidden="true">R</div><div><b>Ratu AI</b><small>Kapasitas Qwen3-14B</small></div></div>
+    <div><div class="grup">Laporan</div><nav class="nav" id="nav"></nav></div>
+  </aside>
+  <main id="isi" tabindex="-1">
+    <div class="mtabs" id="mtabs" role="navigation" aria-label="Navigasi"></div>
+    <header class="top">
+      <div>
+        <h1>Kapasitas Qwen3-14B di mesin B</h1>
+        <p class="sub">AWS g5.12xlarge · 4× A10G · 4 salinan model (1 per GPU) · LiteLLM simple-shuffle · 1–20 pengguna bersamaan</p>
+        <div class="badges"><span class="badge hist">Hasil uji tetap</span><span class="badge agent">Diuji lewat agent dan LiteLLM</span></div>
+      </div>
+      <div class="aksi">
+        <button class="btn" type="button" id="cetak"><svg viewBox="0 0 24 24"><path d="M6 9V3h12v6M6 18H4v-7h16v7h-2M8 14h8v7H8z"/></svg>Cetak / PDF</button>
+        <button class="btn" type="button" id="tema" aria-pressed="false">Tema gelap</button>
+      </div>
+    </header>
+    <section class="view" id="v-skala"></section>
+    <section class="view" id="v-antrean" hidden></section>
+    <section class="view" id="v-akurasi" hidden></section>
+    <section class="view" id="v-metode" hidden></section>
+    <p class="foot" id="foot"></p>
+  </main>
+</div>
+<div id="tip" role="tooltip"></div>
+<script>
+"use strict";
+const DATA = {"dibuat":"2026-11-23 16:29","harga_usd_per_jam":7.93854,"konfig":["seqs4"],"sumber":[{"folder":"data/agent-workflow-latency/2026-11-20-07-30-4gpu","tanggal":"20 Nov 2026","konfig":"seqs4","max_num_seqs":[4],"tahap":[1,2,3,5,8],"dicatat_otomatis":false,"jumlah":{"pertanyaan":105,"span":1604,"llm":383,"llm_ok":383,"litellm":383,"cocok":383,"geser_jam_ms":11516.0}},{"folder":"data/agent-workflow-latency/2026-11-23-08-35-14b-seqs4-c10-20","tanggal":"23 Nov 2026","konfig":"seqs4","max_num_seqs":[4],"tahap":[10,12,16,20],"dicatat_otomatis":true,"jumlah":{"pertanyaan":182,"span":2618,"llm":762,"llm_ok":762,"litellm":762,"cocok":736,"geser_jam_ms":524.0}}],"baris":[{"konfig":"seqs4","pengguna":1,"tanggal":"20 Nov 2026","folder":"data/agent-workflow-latency/2026-11-20-07-30-4gpu","n":3,"ok":3,"benar":3,"habis":0,"galat":0,"kosong":0,"p50":23.591018099999985,"p95":26.957662299999967,"p99":26.957662299999967,"rata":20.960053199999965,"maks":26.957662299999967,"durasi_s":72.916,"per_menit":2.4685939985737013,"per_menit_90":2.7085185537020093,"token_keluar_dtk":39.59350485490153,"token_masuk_per_q":9694.333333333334,"token_keluar_per_q":962.3333333333334,"llm_per_q":2.6666666666666665,"tps_panggilan":49.552934104741155,"ttft_litellm_ms":66.0,"antre_ms":0.02148549947378342,"decode_ms":7282.82638937435,"preemption":0,"cache":0.9484578619812262,"tunggu_s":0.7260669333333305,"berpikir_s":14.961097299999945,"menulis_s":4.564947200000053,"alat_db_sop_s":0.22087070000000922,"penuh_persen":0,"kv_maks":10.1,"gpu_util":20.205479452054796,"watt":380.15999999999997,"usd_per_q_penuh":0.0535969058,"replika":{"GPU 0":{"permintaan":2,"antre_ms":0.021000998458475806},"GPU 1":{"permintaan":1,"antre_ms":0.02647099972818978},"GPU 2":{"permintaan":3,"antre_ms":0.020123666521006573},"GPU 3":{"permintaan":2,"antre_ms":0.021519999791053124}},"per_q":{"Q1":{"n":1,"benar":1},"Q7":{"n":1,"benar":1},"Q8":{"n":1,"benar":1}}},{"konfig":"seqs4","pengguna":2,"tanggal":"20 Nov 2026","folder":"data/agent-workflow-latency/2026-11-20-07-30-4gpu","n":6,"ok":6,"benar":5,"habis":0,"galat":0,"kosong":0,"p50":31.498293500000145,"p95":59.388792899999764,"p99":59.388792899999764,"rata":33.29414009999996,"maks":59.388792899999764,"durasi_s":134.366,"per_menit":2.679249214831133,"per_menit_90":3.5084886323512148,"token_keluar_dtk":66.9886727297084,"token_masuk_per_q":13607.666666666666,"token_keluar_per_q":1500.1666666666667,"llm_per_q":3.3333333333333335,"tps_panggilan":47.98705966930266,"ttft_litellm_ms":82.0,"antre_ms":0.016972450430330355,"decode_ms":9349.579446199823,"preemption":0,"cache":0.8975332533130833,"tunggu_s":1.322674666666581,"berpikir_s":18.584025266666742,"menulis_s":12.765296399999798,"alat_db_sop_s":0.211551566666613,"penuh_persen":0,"kv_maks":15.9,"gpu_util":33.350746268656714,"watt":464.66100746268654,"usd_per_q_penuh":0.04938286415,"replika":{"GPU 0":{"permintaan":3,"antre_ms":0.018467000093854342},"GPU 1":{"permintaan":8,"antre_ms":0.013720500191993779},"GPU 2":{"permintaan":6,"antre_ms":0.018780500492236268},"GPU 3":{"permintaan":3,"antre_ms":0.020533667945225414}},"per_q":{"Q1":{"n":1,"benar":1},"Q2":{"n":1,"benar":1},"Q3":{"n":1,"benar":1},"Q4":{"n":1,"benar":0},"Q5":{"n":1,"benar":1},"Q8":{"n":1,"benar":1}}},{"konfig":"seqs4","pengguna":3,"tanggal":"20 Nov 2026","folder":"data/agent-workflow-latency/2026-11-20-07-30-4gpu","n":9,"ok":9,"benar":8,"habis":0,"galat":0,"kosong":0,"p50":36.08316659999965,"p95":90.57598219999997,"p99":90.57598219999997,"rata":42.46006352222214,"maks":90.57598219999997,"durasi_s":168.211,"per_menit":3.2102537883967157,"per_menit_90":2.964030797010858,"token_keluar_dtk":97.95435494706052,"token_masuk_per_q":18466,"token_keluar_per_q":1830.7777777777778,"llm_per_q":4.111111111111111,"tps_panggilan":47.740473154837794,"ttft_litellm_ms":135.0,"antre_ms":0.017521729475717892,"decode_ms":9645.848104432722,"preemption":0,"cache":0.8776249443421543,"tunggu_s":1.868203400000102,"berpikir_s":22.424769377777714,"menulis_s":17.466106366666708,"alat_db_sop_s":0.284356544444441,"penuh_persen":0,"kv_maks":27.0,"gpu_util":44.453125,"watt":536.005386904762,"usd_per_q_penuh":0.04121449851666667,"replika":{"GPU 0":{"permintaan":11,"antre_ms":0.01628690866213715},"GPU 1":{"permintaan":7,"antre_ms":0.02017785664065741},"GPU 2":{"permintaan":9,"antre_ms":0.014738333346839579},"GPU 3":{"permintaan":10,"antre_ms":0.01952579987118952}},"per_q":{"Q1":{"n":1,"benar":1},"Q2":{"n":1,"benar":1},"Q3":{"n":1,"benar":1},"Q4":{"n":1,"benar":1},"Q5":{"n":1,"benar":0},"Q6":{"n":2,"benar":2},"Q7":{"n":1,"benar":1},"Q8":{"n":1,"benar":1}}},{"konfig":"seqs4","pengguna":5,"tanggal":"20 Nov 2026","folder":"data/agent-workflow-latency/2026-11-20-07-30-4gpu","n":15,"ok":15,"benar":15,"habis":0,"galat":0,"kosong":0,"p50":33.153481600000056,"p95":65.09689380000019,"p99":65.09689380000019,"rata":34.47766963999998,"maks":65.09689380000019,"durasi_s":142.261,"per_menit":6.3264000674816,"per_menit_90":6.524746860027863,"token_keluar_dtk":153.52767097096182,"token_masuk_per_q":15781.6,"token_keluar_per_q":1456.0666666666666,"llm_per_q":3.7333333333333334,"tps_panggilan":46.75834970530452,"ttft_litellm_ms":107.0,"antre_ms":0.015301339512266816,"decode_ms":8637.2987693392,"preemption":0,"cache":0.8716310978185566,"tunggu_s":1.8739694200001968,"berpikir_s":16.93218039333327,"menulis_s":15.062338139999813,"alat_db_sop_s":0.19637798666668435,"penuh_persen":0,"kv_maks":25.6,"gpu_util":61.80721830985915,"watt":650.5492605633802,"usd_per_q_penuh":0.02091378961,"replika":{"GPU 0":{"permintaan":19,"antre_ms":0.012581368585080398},"GPU 1":{"permintaan":11,"antre_ms":0.021828909005059606},"GPU 2":{"permintaan":14,"antre_ms":0.0124311435294138},"GPU 3":{"permintaan":12,"antre_ms":0.016972916758580443}},"per_q":{"Q1":{"n":2,"benar":2},"Q2":{"n":2,"benar":2},"Q3":{"n":2,"benar":2},"Q4":{"n":2,"benar":2},"Q5":{"n":2,"benar":2},"Q6":{"n":2,"benar":2},"Q7":{"n":2,"benar":2},"Q8":{"n":1,"benar":1}}},{"konfig":"seqs4","pengguna":8,"tanggal":"20 Nov 2026","folder":"data/agent-workflow-latency/2026-11-20-07-30-4gpu","n":24,"ok":24,"benar":24,"habis":0,"galat":0,"kosong":0,"p50":35.294018600000065,"p95":68.20822709999979,"p99":68.83949390000012,"rata":38.35948085416673,"maks":68.83949390000012,"durasi_s":163.59,"per_menit":8.802494039977994,"per_menit_90":10.22786684796403,"token_keluar_dtk":221.67002873036247,"token_masuk_per_q":15865.375,"token_keluar_per_q":1510.9583333333333,"llm_per_q":3.75,"tps_panggilan":42.86015608521409,"ttft_litellm_ms":147.0,"antre_ms":74.04913411115153,"decode_ms":9496.878402888817,"preemption":0,"cache":0.8834332626868259,"tunggu_s":1.9577725583333523,"berpikir_s":20.241296375000054,"menulis_s":15.56181609583322,"alat_db_sop_s":0.20852438333329823,"penuh_persen":3.0564215416590255,"kv_maks":31.9,"gpu_util":72.59097859327217,"watt":719.2040061162079,"usd_per_q_penuh":0.0150308536875,"replika":{"GPU 0":{"permintaan":18,"antre_ms":9.917550055736987},"GPU 1":{"permintaan":21,"antre_ms":130.348417904835},"GPU 2":{"permintaan":24,"antre_ms":0.010994457928366804},"GPU 3":{"permintaan":27,"antre_ms":138.82687133365027}},"per_q":{"Q1":{"n":3,"benar":3},"Q2":{"n":3,"benar":3},"Q3":{"n":3,"benar":3},"Q4":{"n":3,"benar":3},"Q5":{"n":3,"benar":3},"Q6":{"n":3,"benar":3},"Q7":{"n":3,"benar":3},"Q8":{"n":3,"benar":3}}},{"konfig":"seqs4","pengguna":10,"tanggal":"23 Nov 2026","folder":"data/agent-workflow-latency/2026-11-23-08-35-14b-seqs4-c10-20","n":30,"ok":30,"benar":27,"habis":0,"galat":0,"kosong":0,"p50":31.935112900000007,"p95":86.13916970000002,"p99":93.85662930000002,"rata":36.98134829,"maks":93.85662930000002,"durasi_s":170.869,"per_menit":10.534385991607605,"per_menit_90":11.936464467945298,"token_keluar_dtk":234.02723724022496,"token_masuk_per_q":14794.066666666668,"token_keluar_per_q":1332.9333333333334,"llm_per_q":3.6333333333333333,"tps_panggilan":42.58168184252812,"ttft_litellm_ms":207.0,"antre_ms":400.63817921067096,"decode_ms":9155.951511229548,"preemption":0,"cache":0.8407262219484252,"tunggu_s":3.3684031133333336,"berpikir_s":18.11179812666667,"menulis_s":15.103687870000005,"alat_db_sop_s":0.16929112999999582,"penuh_persen":11.704873324008451,"kv_maks":37.4,"gpu_util":74.3233137829912,"watt":750.3625219941349,"usd_per_q_penuh":0.012559725845,"replika":{"GPU 0":{"permintaan":29,"antre_ms":1435.8255234131727},"GPU 1":{"permintaan":24,"antre_ms":0.011510166586958803},"GPU 2":{"permintaan":26,"antre_ms":0.012226499445834914},"GPU 3":{"permintaan":30,"antre_ms":67.66757406658144}},"per_q":{"Q1":{"n":4,"benar":4},"Q2":{"n":3,"benar":3},"Q3":{"n":3,"benar":3},"Q4":{"n":4,"benar":3},"Q5":{"n":4,"benar":3},"Q6":{"n":4,"benar":4},"Q7":{"n":4,"benar":4},"Q8":{"n":4,"benar":3}}},{"konfig":"seqs4","pengguna":12,"tanggal":"23 Nov 2026","folder":"data/agent-workflow-latency/2026-11-23-08-35-14b-seqs4-c10-20","n":36,"ok":35,"benar":35,"habis":1,"galat":0,"kosong":0,"p50":42.555396499999915,"p95":122.41144389999995,"p99":300.9501493,"rata":52.63898445277777,"maks":300.9501493,"durasi_s":369.947,"per_menit":5.838674188464834,"per_menit_90":10.314059905706442,"token_keluar_dtk":187.16194481912274,"token_masuk_per_q":22763.527777777777,"token_keluar_per_q":1923.3333333333333,"llm_per_q":4.944444444444445,"tps_panggilan":41.570734203121006,"ttft_litellm_ms":242.0,"antre_ms":338.5899515168388,"decode_ms":9669.562830410225,"preemption":0,"cache":0.8799867483529146,"tunggu_s":4.171724533333333,"berpikir_s":27.09004736666664,"menulis_s":20.6155395027778,"alat_db_sop_s":0.23631178055556182,"penuh_persen":10.812359608268212,"kv_maks":42.0,"gpu_util":56.09560810810811,"watt":631.0513513513513,"usd_per_q_penuh":0.022660795195833333,"replika":{"GPU 0":{"permintaan":42,"antre_ms":260.1646058811595},"GPU 1":{"permintaan":46,"antre_ms":783.0324055218585},"GPU 2":{"permintaan":47,"antre_ms":139.7710124893297},"GPU 3":{"permintaan":43,"antre_ms":157.05510888336332}},"per_q":{"Q1":{"n":4,"benar":4},"Q2":{"n":5,"benar":5},"Q3":{"n":5,"benar":5},"Q4":{"n":5,"benar":5},"Q5":{"n":5,"benar":4},"Q6":{"n":4,"benar":4},"Q7":{"n":4,"benar":4},"Q8":{"n":4,"benar":4}}},{"konfig":"seqs4","pengguna":16,"tanggal":"23 Nov 2026","folder":"data/agent-workflow-latency/2026-11-23-08-35-14b-seqs4-c10-20","n":48,"ok":47,"benar":46,"habis":0,"galat":0,"kosong":1,"p50":41.7328983,"p95":121.55253110000002,"p99":266.4716007999999,"rata":56.06876411666666,"maks":266.4716007999999,"durasi_s":374.484,"per_menit":7.690582241163842,"per_menit_90":12.833069137313561,"token_keluar_dtk":203.03671184883734,"token_masuk_per_q":18662.291666666668,"token_keluar_per_q":1584.0416666666667,"llm_per_q":4.395833333333333,"tps_panggilan":42.172665047471845,"ttft_litellm_ms":384.0,"antre_ms":2356.6150144218946,"decode_ms":9149.107400104056,"preemption":0,"cache":0.8829274112453769,"tunggu_s":13.908072720833331,"berpikir_s":22.994453981249986,"menulis_s":17.902418437500014,"alat_db_sop_s":0.5093173374999945,"penuh_persen":15.354461071768085,"kv_maks":42.7,"gpu_util":60.7022696929239,"watt":658.657743658211,"usd_per_q_penuh":0.017204029012499997,"replika":{"GPU 0":{"permintaan":59,"antre_ms":6879.34497244073},"GPU 1":{"permintaan":49,"antre_ms":625.6952018983221},"GPU 2":{"permintaan":52,"antre_ms":71.51767371159131},"GPU 3":{"permintaan":51,"antre_ms":1117.380994960709}},"per_q":{"Q1":{"n":6,"benar":5},"Q2":{"n":6,"benar":6},"Q3":{"n":6,"benar":6},"Q4":{"n":6,"benar":5},"Q5":{"n":6,"benar":6},"Q6":{"n":6,"benar":6},"Q7":{"n":6,"benar":6},"Q8":{"n":6,"benar":6}}},{"konfig":"seqs4","pengguna":20,"tanggal":"23 Nov 2026","folder":"data/agent-workflow-latency/2026-11-23-08-35-14b-seqs4-c10-20","n":60,"ok":59,"benar":57,"habis":0,"galat":0,"kosong":1,"p50":53.680458700000074,"p95":93.23822839999991,"p99":237.85222239999985,"rata":56.7408912716667,"maks":237.85222239999985,"durasi_s":323.591,"per_menit":11.125154902330411,"per_menit_90":16.75137242535473,"token_keluar_dtk":254.1294411772886,"token_masuk_per_q":15569.216666666667,"token_keluar_per_q":1370.5666666666666,"llm_per_q":3.8833333333333333,"tps_panggilan":39.951080309824704,"ttft_litellm_ms":681.0,"antre_ms":3398.796950502218,"decode_ms":9602.023891660994,"preemption":0,"cache":0.8956199270774443,"tunggu_s":16.8062868483333,"berpikir_s":20.91759366333332,"menulis_s":16.090749811666715,"alat_db_sop_s":0.28084836499997956,"penuh_persen":27.040307054275306,"kv_maks":34.0,"gpu_util":65.88948995363215,"watt":704.2135085007728,"usd_per_q_penuh":0.0118927782275,"replika":{"GPU 0":{"permintaan":59,"antre_ms":789.8365735933821},"GPU 1":{"permintaan":54,"antre_ms":2444.5096924443565},"GPU 2":{"permintaan":58,"antre_ms":2799.8899304312886},"GPU 3":{"permintaan":62,"antre_ms":7272.938584967696}},"per_q":{"Q1":{"n":7,"benar":7},"Q2":{"n":7,"benar":7},"Q3":{"n":7,"benar":7},"Q4":{"n":7,"benar":5},"Q5":{"n":8,"benar":7},"Q6":{"n":8,"benar":8},"Q7":{"n":8,"benar":8},"Q8":{"n":8,"benar":8}}}],"gagal":[{"konfig":"seqs4","pengguna":2,"kode":"Q4","kategori":"SOP","status":"ok","detik":13.4,"alat":[]},{"konfig":"seqs4","pengguna":3,"kode":"Q5","kategori":"Rancangan tiket","status":"ok","detik":31.4,"alat":["cari_sop"]},{"konfig":"seqs4","pengguna":10,"kode":"Q4","kategori":"SOP","status":"ok","detik":19.4,"alat":[]},{"konfig":"seqs4","pengguna":10,"kode":"Q5","kategori":"Rancangan tiket","status":"ok","detik":24.1,"alat":["cari_sop"]},{"konfig":"seqs4","pengguna":10,"kode":"Q8","kategori":"Sapaan umum","status":"ok","detik":72.2,"alat":["daftar_sop"]},{"konfig":"seqs4","pengguna":12,"kode":"Q5","kategori":"Rancangan tiket","status":"waktu-habis","detik":301.0,"alat":["cari_sop","buat_tiket"]},{"konfig":"seqs4","pengguna":16,"kode":"Q4","kategori":"SOP","status":"ok","detik":22.3,"alat":[]},{"konfig":"seqs4","pengguna":16,"kode":"Q1","kategori":"Data penjualan","status":"ok","detik":50.3,"alat":["total_penjualan"]},{"konfig":"seqs4","pengguna":20,"kode":"Q4","kategori":"SOP","status":"ok","detik":41.1,"alat":[]},{"konfig":"seqs4","pengguna":20,"kode":"Q4","kategori":"SOP","status":"ok","detik":25.4,"alat":[]},{"konfig":"seqs4","pengguna":20,"kode":"Q5","kategori":"Rancangan tiket","status":"kosong","detik":237.9,"alat":["buat_tiket"]}],"kategori":{"Q1":"Data penjualan","Q2":"Peringatan dini","Q3":"Stok kosong","Q4":"SOP","Q5":"Rancangan tiket","Q6":"Data karyawan","Q7":"Harus ditolak","Q8":"Sapaan umum"},"teks":{"ringkas":"Qwen3-14B di mesin B (4 salinan model, max-num-seqs 4) diuji dari 1 sampai 20 pengguna yang bertanya bersamaan. Dari 2 sampai 10 pengguna, waktu jawab tengah tetap di kisaran 31–36 detik (1 pengguna: 24 detik), jadi belum ada antrean yang berarti. Mulai 16 pengguna antrean di server mulai terasa: tiap pertanyaan menunggu giliran ±14 detik (di 8 pengguna ±2 detik). Di 20 pengguna, waktu tengah naik ke 54 detik, tetapi jumlah pertanyaan yang tuntas per menit masih naik (tertinggi 11,1 di 20 pengguna). Server belum jenuh: slot replika penuh 27% waktu dan GPU sibuk 66%.","antrean":"Antrean dihitung dari dua sisi: waktu tunggu tiap panggilan di antrean vLLM (dari penghitung server), dan waktu tiap pertanyaan menunggu kata pertama (dari laptop). Keduanya baru naik tajam setelah melewati ±12 pengguna. LiteLLM membagi permintaan ke 4 salinan secara acak (simple-shuffle), tanpa melihat salinan mana yang sedang sibuk, jadi saat ramai satu salinan bisa antre jauh lebih lama daripada yang lain.","akurasi":"Ketepatan tidak turun karena beban. Yang gagal adalah pola yang sama seperti uji-uji sebelumnya: Q4 dijawab tanpa mencari SOP, Q5 (buat tiket) berputar antar agent sampai habis waktu atau berakhir kosong, Q8 sapaan memakai alat, dan sesekali Q1 tidak menuliskan angkanya."},"titik_belok":16,"terbaik":{"pengguna":20,"per_menit":11.125154902330411}};
+/* ---------- format ---------- */
+const nf = (x, d = 1) => x == null || Number.isNaN(x) ? "—" : Number(x).toLocaleString("id-ID", { minimumFractionDigits: d, maximumFractionDigits: d });
+const nf0 = x => nf(x, 0);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const jamWIB = iso => { const d = new Date(new Date(iso).getTime() + 7 * 3600e3); return `${String(d.getUTCHours()).padStart(2, "0")}.${String(d.getUTCMinutes()).padStart(2, "0")}`; };
+const tgl = s => ({ "2026-11-13": "13 Nov 2026", "2026-11-16": "16 Nov 2026" }[s] || s);
+const T = (u, n) => u.tahap[String(n)];
+const persen = (a, b) => b ? 100 * a / b : null;
+const kuantil = (a, q) => { a = a.filter(x => x != null).sort((x, y) => x - y); if (!a.length) return null; return a[Math.min(a.length - 1, Math.max(0, Math.ceil(q * a.length) - 1))]; };
+const median = a => kuantil(a, .5);
+const cssv = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+
+/* ---------- tooltip ---------- */
+const tip = document.getElementById("tip");
+function tampilTip(teks, x, y) { tip.textContent = teks; tip.style.display = "block"; const w = tip.offsetWidth, h = tip.offsetHeight;
+  tip.style.left = Math.min(x + 14, innerWidth - w - 8) + "px"; tip.style.top = (y + 14 + h > innerHeight ? y - h - 10 : y + 14) + "px"; }
+document.addEventListener("pointermove", e => { const el = e.target.closest?.("[data-tip]"); if (!el) { tip.style.display = "none"; return; } tampilTip(el.dataset.tip, e.clientX, e.clientY); });
+document.addEventListener("focusin", e => { const el = e.target.closest?.("[data-tip]"); if (!el) return; const r = el.getBoundingClientRect(); tampilTip(el.dataset.tip, r.right, r.top); });
+document.addEventListener("focusout", () => { tip.style.display = "none"; });
+
+/* ---------- grafik (SVG, digambar ulang saat lebar berubah) ---------- */
+const GRAFIK = [];
+function pasang(el, gambar) { const g = { el, gambar }; GRAFIK.push(g); g.el.innerHTML = gambar(Math.max(300, g.el.clientWidth || 640)); return g; }
+function gambarUlang(g) { if (g.el.offsetParent !== null) g.el.innerHTML = g.gambar(Math.max(300, g.el.clientWidth || 640)); }
+let _rs; addEventListener("resize", () => { clearTimeout(_rs); _rs = setTimeout(() => GRAFIK.forEach(gambarUlang), 120); });
+function skala(maks, langkahMaks = 6) {
+  if (!(maks > 0)) maks = 1;
+  const kasar = maks / langkahMaks, p10 = Math.pow(10, Math.floor(Math.log10(kasar)));
+  const lg = [1, 2, 2.5, 5, 10].map(m => m * p10).find(s => s >= kasar);
+  return { lg, top: Math.ceil(maks / lg) * lg };
+}
+function penanda(bentuk, x, y, r, warna, tipTeks) {
+  const a = `class="pt" fill="var(${warna})" stroke="var(--surface)" stroke-width="2" tabindex="0" data-tip="${esc(tipTeks)}" aria-label="${esc(tipTeks.replace(/\n/g, ", "))}"`;
+  return bentuk === "kotak" ? `<rect x="${x - r}" y="${y - r}" width="${2 * r}" height="${2 * r}" rx="1.5" ${a}/>` : `<circle cx="${x}" cy="${y}" r="${r}" ${a}/>`;
+}
+/** Grafik garis. xs: label kategori; series: {nama, warna, nilai[], tips[], putus, bentuk}. */
+function garis(w, o) {
+  const sempit = w < 520, H = o.tinggi || 300, L = 50, R = sempit ? Math.min(o.kanan ?? 112, 70) : (o.kanan ?? 112), Tp = 14, B = 46;
+  const xs = sempit && o.xsPendek ? o.xsPendek : o.xs;
+  const semua = o.series.flatMap(s => s.nilai).concat((o.ref || []).map(r => r.v)).filter(v => v != null);
+  const { lg, top } = skala(Math.max(...semua, o.minTop || 0) * 1.08);
+  const xp = i => L + (w - L - R) * (i + .5) / xs.length, yp = v => Tp + (H - Tp - B) * (1 - v / top);
+  let s = "";
+  for (let v = 0; v <= top + 1e-9; v += lg) s += `<line class="gl" x1="${L}" x2="${w - R}" y1="${yp(v)}" y2="${yp(v)}"/><text class="ax" x="${L - 8}" y="${yp(v) + 4}" text-anchor="end">${nf(v, Number.isInteger(lg) ? 0 : (lg < .1 ? 2 : 1))}</text>`;
+  xs.forEach((x, i) => s += `<text class="ax" x="${xp(i)}" y="${H - B + 18}" text-anchor="middle">${esc(x)}</text>`);
+  s += `<text class="axt" x="${(L + w - R) / 2}" y="${H - 8}" text-anchor="middle">${esc(o.xJudul)}</text>`;
+  s += `<text class="axt" transform="translate(14 ${(Tp + H - B) / 2}) rotate(-90)" text-anchor="middle">${esc(o.yJudul)}</text>`;
+  (o.ref || []).forEach(r => s += `<line class="ref" x1="${L}" x2="${w - R}" y1="${yp(r.v)}" y2="${yp(r.v)}"/><text class="ax" x="${L + 6}" y="${yp(r.v) - 5}">${esc(sempit ? r.label.replace(/^target .*?: /, "target ") : r.label)}</text>`);
+  const ujung = [];
+  o.series.forEach(se => {
+    const pts = se.nilai.map((v, i) => v == null ? null : [xp(i), yp(v), v, i]).filter(Boolean);
+    let seg = []; const tulis = () => { if (seg.length > 1) s += `<polyline fill="none" stroke="var(${se.warna})" stroke-width="2.2" stroke-linejoin="round" ${se.putus ? 'stroke-dasharray="6 5"' : ""} points="${seg.map(p => p[0] + "," + p[1]).join(" ")}"/>`; seg = []; };
+    se.nilai.forEach((v, i) => { if (v == null) tulis(); else seg.push([xp(i), yp(v)]); }); tulis();
+    pts.forEach(([x, y, v, i]) => s += penanda(se.bentuk || "lingkaran", x, y, se.putus ? 3.5 : 4.5, se.warna, se.tips ? se.tips[i] : `${se.nama}: ${nf(v)}`));
+    if (pts.length && !se.tanpaLabel) ujung.push([pts[pts.length - 1][1], (sempit && se.labelPendek) || se.labelUjung || se.nama]);
+  });
+  ujung.sort((a, b) => a[0] - b[0]);
+  for (let i = 1; i < ujung.length; i++) if (ujung[i][0] - ujung[i - 1][0] < 14) ujung[i][0] = ujung[i - 1][0] + 14;
+  ujung.forEach(([y, t]) => s += `<text class="el" x="${w - R + 10}" y="${y + 4}">${esc(t)}</text>`);
+  return `<svg viewBox="0 0 ${w} ${H}" width="${w}" height="${H}" role="img" aria-label="${esc(o.aria)}">${s}</svg>`;
+}
+/** Grafik batang berkelompok (kategori x seri). */
+function batang(w, o) {
+  const H = o.tinggi || 280, L = 56, R = 16, Tp = 18, B = 46;
+  const semua = o.series.flatMap(s => s.nilai).concat((o.ideal || [])).filter(v => v != null);
+  const { lg, top } = skala(Math.max(...semua) * 1.12);
+  const yp = v => Tp + (H - Tp - B) * (1 - v / top), lebarK = (w - L - R) / o.xs.length, nS = o.series.length, bw = Math.min(46, lebarK * .7 / nS);
+  let s = "";
+  for (let v = 0; v <= top + 1e-9; v += lg) s += `<line class="gl" x1="${L}" x2="${w - R}" y1="${yp(v)}" y2="${yp(v)}"/><text class="ax" x="${L - 8}" y="${yp(v) + 4}" text-anchor="end">${nf(v, Number.isInteger(lg) ? 0 : 1)}</text>`;
+  o.xs.forEach((x, i) => {
+    const cx = L + lebarK * (i + .5);
+    s += `<text class="ax" x="${cx}" y="${H - B + 18}" text-anchor="middle">${esc(x)}</text>`;
+    o.series.forEach((se, j) => {
+      const v = se.nilai[i]; if (v == null) return;
+      const x = cx - nS * bw / 2 + j * bw + 2;
+      s += `<rect x="${x}" y="${yp(v)}" width="${bw - 4}" height="${yp(0) - yp(v)}" rx="3" fill="var(${se.warna})" tabindex="0" class="pt" data-tip="${esc(se.tips[i])}" aria-label="${esc(se.tips[i].replace(/\n/g, ", "))}"/>`;
+      s += `<text class="el" x="${x + (bw - 4) / 2}" y="${yp(v) - 6}" text-anchor="middle">${nf(v, o.desimal ?? 0)}</text>`;
+    });
+    if (o.ideal && o.ideal[i] != null) s += `<line x1="${cx - nS * bw / 2 - 4}" x2="${cx + nS * bw / 2 + 4}" y1="${yp(o.ideal[i])}" y2="${yp(o.ideal[i])}" stroke="var(--ink3)" stroke-width="1.6" stroke-dasharray="4 3"/>`;
+  });
+  s += `<text class="axt" x="${(L + w - R) / 2}" y="${H - 8}" text-anchor="middle">${esc(o.xJudul)}</text>`;
+  s += `<text class="axt" transform="translate(14 ${(Tp + H - B) / 2}) rotate(-90)" text-anchor="middle">${esc(o.yJudul)}</text>`;
+  return `<svg viewBox="0 0 ${w} ${H}" width="${w}" height="${H}" role="img" aria-label="${esc(o.aria)}">${s}</svg>`;
+}
+/** Batang mendatar bertumpuk. rows: {label, bag:{k:v}}. */
+function tumpuk(w, o) {
+  const L = Math.min(190, w * .32), R = 54, Tp = 6, tinggi = 28, H = Tp + o.rows.length * tinggi + 40;
+  const tot = r => o.kunci.reduce((a, k) => a + (r.bag[k] || 0), 0);
+  const { lg, top } = skala(Math.max(...o.rows.map(tot)) * 1.04, w < 500 ? 4 : 7);
+  const xp = v => L + (w - L - R) * v / top;
+  let s = "";
+  for (let v = 0; v <= top + 1e-9; v += lg) s += `<line class="gl" x1="${xp(v)}" x2="${xp(v)}" y1="${Tp}" y2="${H - 34}"/><text class="ax" x="${xp(v)}" y="${H - 20}" text-anchor="middle">${nf(v, Number.isInteger(lg) ? 0 : 1)}</text>`;
+  o.rows.forEach((r, i) => {
+    const y = Tp + i * tinggi + 4; let x = 0;
+    s += `<text class="ax" x="${L - 8}" y="${y + 14}" text-anchor="end">${esc(r.label)}</text>`;
+    o.kunci.forEach(k => { const v = r.bag[k] || 0; if (v <= 0) return;
+      const t = `${r.label}\n${o.nama[k]}: ${nf(v)} ${o.satuan}\n${nf(100 * v / tot(r), 0)}% dari total`;
+      s += `<rect x="${xp(x)}" y="${y}" width="${Math.max(.8, xp(x + v) - xp(x) - 1)}" height="${tinggi - 10}" rx="2" fill="var(--w-${k})" class="pt" tabindex="-1" data-tip="${esc(t)}"/>`; x += v; });
+    s += `<text class="el" x="${xp(x) + 6}" y="${y + 14}">${nf(x)}</text>`;
+  });
+  s += `<text class="axt" x="${(L + w - R) / 2}" y="${H - 4}" text-anchor="middle">${esc(o.xJudul)}</text>`;
+  return `<svg viewBox="0 0 ${w} ${H}" width="${w}" height="${H}" role="img" aria-label="${esc(o.aria)}">${s}</svg>`;
+}
+/** Deret waktu GPU (satu metrik), dengan pita fase. */
+function deret(w, o) {
+  const H = o.tinggi || 220, L = 52, R = 14, Tp = 22, B = 40;
+  const d = o.deret, tmax = d[d.length - 1][0] / 60, top = o.top;
+  const xp = m => L + (w - L - R) * m / tmax, yp = v => Tp + (H - Tp - B) * (1 - v / top);
+  let s = "";
+  o.fase.forEach(([n, a, b], i) => { s += `<rect class="band" x="${xp(a / 60)}" y="${Tp}" width="${Math.max(1, xp(b / 60) - xp(a / 60))}" height="${H - Tp - B}"/>`;
+    s += `<text class="ax" x="${(xp(a / 60) + xp(b / 60)) / 2}" y="${Tp - 6}" text-anchor="middle">${esc(w < 640 ? n.split(" ")[0] : n)}</text>`; });
+  const { lg } = skala(top, 4);
+  for (let v = 0; v <= top + 1e-9; v += lg) s += `<line class="gl" x1="${L}" x2="${w - R}" y1="${yp(v)}" y2="${yp(v)}"/><text class="ax" x="${L - 8}" y="${yp(v) + 4}" text-anchor="end">${nf(v, 0)}</text>`;
+  const lgx = skala(tmax, w < 500 ? 4 : 8).lg;
+  for (let m = 0; m <= tmax + 1e-9; m += lgx) s += `<text class="ax" x="${xp(m)}" y="${H - B + 16}" text-anchor="middle">${nf(m, Number.isInteger(lgx) ? 0 : 1)}</text>`;
+  s += `<polyline fill="none" stroke="var(${o.warna})" stroke-width="1.6" points="${d.map(r => `${xp(r[0] / 60)},${yp(r[o.idx])}`).join(" ")}"/>`;
+  if (o.ref) s += `<line class="ref" x1="${L}" x2="${w - R}" y1="${yp(o.ref.v)}" y2="${yp(o.ref.v)}"/><text class="ax" x="${L + 4}" y="${yp(o.ref.v) + 13}">${esc(o.ref.label)}</text>`;
+  // titik tooltip tak terlihat, satu per 30 detik
+  const lompat = Math.max(1, Math.round(30 / 5));
+  d.forEach((r, i) => { if (i % lompat) return; s += `<rect x="${xp(r[0] / 60) - 3}" y="${Tp}" width="6" height="${H - Tp - B}" fill="transparent" data-tip="${esc(`menit ${nf(r[0] / 60)}\n${o.nama}: ${nf(r[o.idx])} ${o.satuan}\n(rata-rata 5 detik)`)}"/>`; });
+  s += `<text class="axt" x="${(L + w - R) / 2}" y="${H - 6}" text-anchor="middle">menit sejak rekaman dimulai</text>`;
+  s += `<text class="axt" transform="translate(13 ${(Tp + H - B) / 2}) rotate(-90)" text-anchor="middle">${esc(o.yJudul)}</text>`;
+  return `<svg viewBox="0 0 ${w} ${H}" width="${w}" height="${H}" role="img" aria-label="${esc(o.aria)}">${s}</svg>`;
+}
+const NAMA_BAG = { persiapan: "Persiapan agent", tunggu: "Menunggu kata pertama", berpikir: "Model berpikir", rencana: "Model menulis perintah alat", menulis: "Model menulis teks", ekor: "Model, sisa lain", alat: "Alat berjalan", lain: "Kode agent & jeda" };
+const BAG = ["persiapan", "tunggu", "berpikir", "rencana", "menulis", "ekor", "alat", "lain"];
+function waterfall(w, q) {
+  const baris = [{ label: "Persiapan agent", seg: [["persiapan", 0, q.persiapan]] }];
+  q.langkah.forEach(l => {
+    if (l.jenis === "alat") baris.push({ label: l.label, seg: [["alat", l.a, l.a + l.dur]] });
+    else baris.push({ label: l.label + (l.masuk ? ` · ${nf0(l.masuk)}→${nf0(l.keluar)} tok` : ""), seg: l.seg.map(([k, x, y]) => [k, l.a + x, l.a + y]) });
+  });
+  const L = Math.min(270, w * .42), R = 18, Tp = 6, tinggi = 24, H = Tp + baris.length * tinggi + 44;
+  const top = Math.max(q.total, ...baris.flatMap(b => b.seg.map(s => s[2]))) * 1.02;
+  const { lg } = skala(top, w < 500 ? 4 : 8);
+  const xp = t => L + (w - L - R) * t / top;
+  let s = "";
+  for (let v = 0; v <= top + 1e-9; v += lg) s += `<line class="gl" x1="${xp(v)}" x2="${xp(v)}" y1="${Tp}" y2="${H - 38}"/><text class="ax" x="${xp(v)}" y="${H - 24}" text-anchor="middle">${nf(v, Number.isInteger(lg) ? 0 : 1)}</text>`;
+  s += `<line x1="${xp(q.total)}" x2="${xp(q.total)}" y1="${Tp}" y2="${H - 38}" stroke="var(--ink2)" stroke-dasharray="3 3"/>`;
+  baris.forEach((b, i) => {
+    const y = Tp + i * tinggi + 3;
+    s += `<text class="ax" x="${L - 8}" y="${y + 12}" text-anchor="end">${esc(b.label.length > 52 ? b.label.slice(0, 51) + "…" : b.label)}</text>`;
+    b.seg.forEach(([k, a, z]) => { const t = `${b.label}\n${NAMA_BAG[k]}: ${nf(z - a, 2)} dtk\nmulai detik ${nf(a)}`;
+      s += `<rect x="${xp(a)}" y="${y}" width="${Math.max(1.5, xp(z) - xp(a))}" height="${tinggi - 8}" rx="2" fill="var(--w-${k})" class="pt" data-tip="${esc(t)}"/>`; });
+  });
+  s += `<text class="axt" x="${(L + w - R) / 2}" y="${H - 6}" text-anchor="middle">detik sejak pertanyaan dikirim · garis putus = jawaban selesai (${nf(q.total)} dtk)</text>`;
+  return `<svg viewBox="0 0 ${w} ${H}" width="${w}" height="${H}" role="img" aria-label="Waterfall ${esc(q.kode)}">${s}</svg>`;
+}
+
+/* ---------- tabel: cari, urut, ekspor CSV ---------- */
+function tabel(el, o) {
+  let urut = null, arah = 1, cari = "";
+  const id = "t" + Math.random().toString(36).slice(2, 8);
+  el.innerHTML = `<div class="tblbar">${o.cari !== false ? `<input type="search" placeholder="Cari di tabel…" aria-label="Cari di tabel ${esc(o.judul)}" id="${id}-c">` : ""}<button class="btn" type="button" id="${id}-x">Unduh CSV</button><span class="n" id="${id}-n"></span></div><div class="tw"><table><caption class="na" style="caption-side:bottom;text-align:left;padding:6px 2px;font-size:12px">${esc(o.judul)}</caption><thead><tr>${o.kol.map((k, i) => `<th scope="col" class="${k.num ? "num" : ""}" aria-sort="none"><button type="button" data-i="${i}">${esc(k.label)}</button></th>`).join("")}</tr></thead><tbody></tbody></table></div>`;
+  const tb = el.querySelector("tbody");
+  const nilai = (r, k) => typeof k.v === "function" ? k.v(r) : r[k.key];
+  function isi() {
+    let rows = o.rows.slice();
+    if (cari) rows = rows.filter(r => o.kol.some(k => String(k.f ? k.f(nilai(r, k), r) : nilai(r, k)).toLowerCase().includes(cari)));
+    if (urut != null) { const k = o.kol[urut]; rows.sort((a, b) => { const x = nilai(a, k), y = nilai(b, k); if (x == null) return 1; if (y == null) return -1; return (typeof x === "number" && typeof y === "number" ? x - y : String(x).localeCompare(String(y), "id", { numeric: true })) * arah; }); }
+    tb.innerHTML = rows.map(r => `<tr>${o.kol.map(k => { const v = nilai(r, k); const t = k.html ? k.html(v, r) : esc(k.f ? k.f(v, r) : v ?? "—"); return `<td class="${k.num ? "num" : ""} ${k.wrap ? "wrap" : ""}">${t}</td>`; }).join("")}</tr>`).join("");
+    el.querySelector(`#${id}-n`).textContent = `${rows.length} dari ${o.rows.length} baris`;
+    return rows;
+  }
+  el.querySelectorAll("th button").forEach(b => b.addEventListener("click", () => {
+    const i = +b.dataset.i; arah = urut === i ? -arah : 1; urut = i;
+    el.querySelectorAll("th").forEach(th => th.setAttribute("aria-sort", "none"));
+    b.parentElement.setAttribute("aria-sort", arah > 0 ? "ascending" : "descending"); isi(); }));
+  const c = el.querySelector(`#${id}-c`); if (c) c.addEventListener("input", () => { cari = c.value.trim().toLowerCase(); isi(); });
+  el.querySelector(`#${id}-x`).addEventListener("click", () => {
+    const rows = isi(); const q = s => `"${String(s ?? "").replace(/"/g, '""')}"`;
+    const csv = [o.kol.map(k => q(k.label)).join(",")].concat(rows.map(r => o.kol.map(k => { const v = nilai(r, k); return q(k.csv ? k.csv(v, r) : (v == null ? "" : typeof v === "number" ? v : (k.f ? k.f(v, r) : v))); }).join(","))).join("\r\n");
+    const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" }));
+    a.download = (o.berkas || "data") + ".csv"; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); });
+  isi();
+}
+
+/* ---------- kontrol ---------- */
+function segmen(el, pilihan, aktif, ubah, label) {
+  el.innerHTML = `<div class="seg" role="group" aria-label="${esc(label)}">${pilihan.map(([k, t]) => `<button type="button" data-k="${esc(k)}" aria-pressed="${k === aktif}">${esc(t)}</button>`).join("")}</div>`;
+  el.querySelectorAll("button").forEach(b => b.addEventListener("click", () => { el.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x === b)); ubah(b.dataset.k); }));
+}
+const legenda = items => `<div class="leg">${items.map(([t, w, bentuk]) => `<span><i style="background:var(${w});${bentuk === "kotak" ? "" : "border-radius:50%"}"></i>${esc(t)}</span>`).join("")}</div>`;
+const legendaBag = ks => `<div class="leg">${ks.map(k => `<span><i style="background:var(--w-${k})"></i>${NAMA_BAG[k]}</span>`).join("")}</div>`;
+const kpi = (l, v, sat, k, delta) => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}${sat ? `<small>${sat}</small>` : ""}</div><div class="k">${k}</div>${delta || ""}</div>`;
+const delta = (cls, t) => `<span class="delta ${cls}">${t}</span>`;
+const $ = (s, r = document) => r.querySelector(s);
+
+
+const KON = DATA.konfig, KAT = DATA.kategori, TX = DATA.teks;
+const NAMA_K = k => k === "campuran" ? "setelan campuran" : `max-num-seqs ${k.replace("seqs", "")}`;
+const WK = k => ({ seqs4: "--k4", seqs8: "--k8" })[k] || "--accent";
+const NS = [...new Set(DATA.baris.map(r => r.pengguna))].sort((a, b) => a - b);
+const R = (k, n) => DATA.baris.find(r => r.konfig === k && r.pengguna === n) || null;
+const A = n => R("seqs4", n);
+const legK = () => legenda(KON.map(k => [NAMA_K(k), WK(k), "lingkaran"]));
+const seri = (kunci, sat, d = 1) => KON.map(k => ({ nama: NAMA_K(k), warna: WK(k), nilai: NS.map(n => R(k, n)?.[kunci] ?? null),
+  tips: NS.map(n => { const r = R(k, n); return r ? `${NAMA_K(k)} · ${n} pengguna\n${nf(r[kunci], d)} ${sat}\nn = ${r.n} · ${r.tanggal}` : ""; }) }));
+const nMaks = Math.max(...NS);
+
+/* ======================= SKALA */
+function vSkala() {
+  const t = DATA.terbaik, b = DATA.titik_belok, a1 = A(1), a8 = A(8), a10 = A(10), aM = A(nMaks);
+  $("#v-skala").innerHTML = `<h2 style="margin-top:0">Berapa pengguna yang sanggup dilayani?</h2>
+  <div class="card hero"><p>${esc(TX.ringkas)}</p>
+    <p class="batas">1–8 pengguna dari uji 20 Nov, 10–20 pengguna dari uji 23 Nov. Keduanya memakai server, image vLLM (0.33.0rc1.dev1030), setelan, skrip, kriteria benar, dan batas waktu 300 detik yang sama. Tiap pengguna bertanya 3 kali berurutan.</p></div>
+  <div class="kpis">
+    ${kpi("Waktu tengah, 1 pengguna", nf(a1?.p50), "dtk", "acuan tanpa antrean")}
+    ${kpi("Waktu tengah, 10 pengguna", nf(a10?.p50), "dtk", `8 pengguna: ${nf(a8?.p50)} dtk`)}
+    ${kpi(`Waktu tengah, ${nMaks} pengguna`, nf(aM?.p50), "dtk", `P95 ${nf(aM?.p95)} dtk`)}
+    ${kpi("Tuntas per menit, tertinggi", nf(t?.per_menit, 1), "pertanyaan", `di ${t?.pengguna} pengguna`)}
+    ${kpi("Antrean mulai terasa", b ? b : "—", b ? "pengguna" : "", "menunggu kata pertama > 3× nilai di 8 pengguna")}
+    ${kpi(`Biaya per pertanyaan, ${nMaks} pengguna`, `$${nf(aM?.usd_per_q_penuh, 3)}`, "", `kalau server terus dipakai setingkat ini · tarif $${DATA.harga_usd_per_jam}/jam`)}
+  </div>
+  <div class="card"><h3>Waktu jawab per jumlah pengguna</h3><p class="ket">Garis tegas: waktu tengah (P50). Garis putus: P95, artinya 95 dari 100 pertanyaan selesai lebih cepat dari ini. Dari pertanyaan dikirim sampai jawaban selesai, diukur di laptop.</p>${legK()}<div class="chart" id="sk-c"></div></div>
+  <div class="card"><h3>Pertanyaan tuntas per menit</h3><p class="ket">Tahap baru selesai saat pengguna paling lambat selesai. Kalau satu pertanyaan macet beberapa menit (12 dan 16 pengguna: satu Q5), angka ini ikut turun walau server tidak penuh. Karena itu ada pembanding kedua: tuntas per menit sampai 90% pertanyaan selesai.</p>
+    <div class="ctl"><span id="sk-m"></span></div>${legK()}<div class="chart" id="sk-t"></div></div>
+  <div class="card"><h3>Semua angka per tahap</h3><div id="sk-tb"></div></div>`;
+  pasang($("#sk-c"), w => garis(w, { xs: NS.map(n => `${n} pengguna`), xsPendek: NS.map(String), xJudul: "pengguna bersamaan", yJudul: "detik", aria: "P50 dan P95", kanan: 110,
+    series: KON.flatMap(k => [["p50", false], ["p95", true]].map(([m, put]) => ({ nama: `${NAMA_K(k)} ${m.toUpperCase()}`, warna: WK(k), putus: put, nilai: NS.map(n => R(k, n)?.[m] ?? null),
+      tips: NS.map(n => { const r = R(k, n); return r ? `${NAMA_K(k)} · ${n} pengguna\n${m.toUpperCase()}: ${nf(r[m])} dtk\nn = ${r.n} · ${r.habis} habis waktu` : ""; }) }))) }));
+  let m = "per_menit";
+  const gt = pasang($("#sk-t"), w => batang(w, { xs: NS.map(String), xJudul: "pengguna bersamaan", yJudul: "pertanyaan/menit", desimal: 1, aria: "Throughput", series: seri(m, "per menit", 2) }));
+  segmen($("#sk-m"), [["per_menit", "Seluruh tahap"], ["per_menit_90", "Sampai 90% selesai"]], m, k => { m = k; gambarUlang(gt); }, "Cara hitung");
+  tabel($("#sk-tb"), { judul: "Kapasitas per tahap", berkas: "kapasitas-14b", cari: false,
+    kol: [{ key: "pengguna", label: "Pengguna", num: true }, { key: "k", label: "Setelan" }, { key: "tanggal", label: "Diuji" }, { key: "n", label: "n", num: true },
+      { key: "sel", label: "Selesai" }, { key: "benar", label: "Sesuai kriteria", num: true }, { key: "habis", label: "Habis waktu", num: true },
+      { key: "p50", label: "P50 (dtk)", num: true, f: v => nf(v) }, { key: "p95", label: "P95", num: true, f: v => nf(v) }, { key: "p99", label: "P99", num: true, f: v => nf(v) },
+      { key: "per_menit", label: "Tuntas/menit", num: true, f: v => nf(v, 2) }, { key: "per_menit_90", label: "Tuntas/menit (90%)", num: true, f: v => nf(v, 2) },
+      { key: "token_keluar_dtk", label: "Token ditulis/dtk", num: true, f: v => nf(v, 0) }, { key: "usd_per_q_penuh", label: "USD/pertanyaan", num: true, f: v => nf(v, 4) }],
+    rows: DATA.baris.map(r => Object.assign({ k: NAMA_K(r.konfig), sel: `${r.ok}/${r.n}` }, r)) });
+}
+
+/* ======================= ANTREAN & REPLIKA */
+function vAntrean() {
+  const rep = ["GPU 0", "GPU 1", "GPU 2", "GPU 3"], WR = ["--r0", "--r1", "--r2", "--r3"];
+  const nRep = NS.filter(n => A(n) && Object.keys(A(n).replika || {}).length);
+  $("#v-antrean").innerHTML = `<h2 style="margin-top:0">Antrean dan pembagian ke 4 GPU</h2>
+  <div class="card hero"><p>${esc(TX.antrean)}</p></div>
+  <div class="card"><h3>Menunggu giliran</h3><p class="ket">Kiri: rata-rata waktu satu panggilan model menunggu di antrean vLLM. Kanan: rata-rata waktu satu pertanyaan menunggu kata pertama, dijumlah dari semua panggilan model di pertanyaan itu.</p>
+    <div class="ctl"><span id="an-m"></span></div>${legK()}<div class="chart" id="an-c"></div></div>
+  <div class="card"><h3>Seberapa penuh server</h3><p class="ket">Slot penuh = keempat slot di satu salinan model terpakai, jadi permintaan berikutnya harus antre. Angkanya rata-rata 4 salinan.</p>
+    <div class="ctl"><span id="an-p"></span></div>${legK()}<div class="chart" id="an-g"></div></div>
+  <div class="card"><h3>Pembagian permintaan ke tiap GPU</h3><p class="ket">Dari penghitung vLLM tiap salinan. Kalau satu GPU mendapat jauh lebih banyak, antreannya juga lebih panjang.</p>
+    <div class="ctl"><span id="an-r"></span></div>${legenda(rep.map((r, i) => [r, WR[i], "kotak"]))}<div class="chart" id="an-rc"></div></div>
+  <div class="card"><h3>Tabel antrean dan GPU</h3><div id="an-t"></div></div>`;
+  let m = "antre_ms";
+  const MA = { antre_ms: ["Antre vLLM per panggilan", "milidetik", 0], tunggu_s: ["Menunggu kata pertama per pertanyaan", "detik", 1] };
+  const g1 = pasang($("#an-c"), w => batang(w, { xs: NS.map(String), xJudul: "pengguna bersamaan", yJudul: MA[m][1], desimal: MA[m][2], aria: MA[m][0], series: seri(m, MA[m][1], MA[m][2]) }));
+  segmen($("#an-m"), Object.entries(MA).map(([k, v]) => [k, v[0]]), m, k => { m = k; gambarUlang(g1); }, "Pilih ukuran");
+  let p = "penuh_persen";
+  const MP = { penuh_persen: ["Slot penuh (% waktu)", "%"], gpu_util: ["GPU sibuk (%)", "%"], kv_maks: ["Memori KV maks (%)", "%"], watt: ["Daya 4 GPU (W)", "watt"] };
+  const g2 = pasang($("#an-g"), w => batang(w, { xs: NS.map(String), xJudul: "pengguna bersamaan", yJudul: MP[p][1], desimal: 0, aria: MP[p][0], series: seri(p, MP[p][1], 0) }));
+  segmen($("#an-p"), Object.entries(MP).map(([k, v]) => [k, v[0]]), p, k => { p = k; gambarUlang(g2); }, "Pilih ukuran");
+  let r = "permintaan";
+  const MR = { permintaan: ["Permintaan per GPU", "permintaan", 0], antre_ms: ["Antre per GPU (ms)", "milidetik", 0] };
+  const g3 = pasang($("#an-rc"), w => batang(w, { xs: nRep.map(String), xJudul: "pengguna bersamaan", yJudul: MR[r][1], desimal: MR[r][2], aria: MR[r][0],
+    series: rep.map((x, i) => ({ nama: x, warna: WR[i], nilai: nRep.map(n => A(n).replika[x]?.[r] ?? null), tips: nRep.map(n => `${x} · ${n} pengguna\n${nf(A(n).replika[x]?.[r], 0)} ${MR[r][1]}`) })) }));
+  segmen($("#an-r"), Object.entries(MR).map(([k, v]) => [k, v[0]]), r, k => { r = k; gambarUlang(g3); }, "Pilih ukuran");
+  tabel($("#an-t"), { judul: "Antrean dan GPU", berkas: "antrean-14b", cari: false,
+    kol: [{ key: "pengguna", label: "Pengguna", num: true }, { key: "k", label: "Setelan" }, { key: "antre_ms", label: "Antre vLLM (ms)", num: true, f: nf0 },
+      { key: "tunggu_s", label: "Tunggu kata pertama (dtk)", num: true, f: v => nf(v) }, { key: "berpikir_s", label: "Berpikir (dtk)", num: true, f: v => nf(v) },
+      { key: "menulis_s", label: "Menulis (dtk)", num: true, f: v => nf(v) }, { key: "alat_db_sop_s", label: "Alat + DB + SOP (dtk)", num: true, f: v => nf(v, 2) },
+      { key: "penuh_persen", label: "Slot penuh (%)", num: true, f: v => nf(v) }, { key: "kv_maks", label: "KV maks (%)", num: true, f: v => nf(v) },
+      { key: "gpu_util", label: "GPU sibuk (%)", num: true, f: v => nf(v) }, { key: "watt", label: "Daya (W)", num: true, f: nf0 },
+      { key: "preemption", label: "Preemption", num: true }, { key: "rep", label: "Permintaan GPU 0/1/2/3", wrap: true }],
+    rows: DATA.baris.map(x => Object.assign({ k: NAMA_K(x.konfig), rep: ["GPU 0", "GPU 1", "GPU 2", "GPU 3"].map(g => x.replika?.[g]?.permintaan ?? "—").join(" / ") }, x)) });
+}
+
+/* ======================= AKURASI */
+function vAkurasi() {
+  const Q = Object.keys(KAT);
+  $("#v-akurasi").innerHTML = `<h2 style="margin-top:0">Apakah jawaban tetap benar saat ramai?</h2>
+  <div class="card hero"><p>${esc(TX.akurasi)}</p></div>
+  <div class="card"><h3>Sesuai kriteria per tahap</h3><p class="ket">Persentase pertanyaan yang dijawab sesuai kriteria otomatis (alat yang benar dipanggil, angka kunci tertulis, gaji ditolak, sapaan tanpa alat).</p>${legK()}<div class="chart" id="ak-c"></div></div>
+  <div class="card"><h3>Per jenis pertanyaan</h3><p class="ket">Benar / jumlah, per tahap. Sel kosong berarti pertanyaan itu tidak muncul di tahap tersebut.</p><div id="ak-q"></div></div>
+  <div class="card"><h3>Daftar yang tidak sesuai kriteria</h3><p class="ket">Isi jawaban tidak ditampilkan di sini. Lamanya ditampilkan supaya terlihat mana yang macet dan mana yang cepat tapi keliru.</p><div id="ak-g"></div></div>`;
+  pasang($("#ak-c"), w => batang(w, { xs: NS.map(String), xJudul: "pengguna bersamaan", yJudul: "% sesuai kriteria", desimal: 0, aria: "Akurasi per tahap",
+    series: KON.map(k => ({ nama: NAMA_K(k), warna: WK(k), nilai: NS.map(n => { const r = R(k, n); return r ? 100 * r.benar / r.n : null; }),
+      tips: NS.map(n => { const r = R(k, n); return r ? `${NAMA_K(k)} · ${n} pengguna\n${r.benar}/${r.n} sesuai kriteria` : ""; }) })) }));
+  tabel($("#ak-q"), { judul: "Akurasi per jenis", berkas: "akurasi-per-jenis-14b", cari: false,
+    kol: [{ key: "q", label: "Jenis pertanyaan" }].concat(DATA.baris.map((r, i) => ({ key: "c" + i, label: `${r.pengguna}${KON.length > 1 ? " · " + r.konfig.replace("seqs", "s") : ""}` }))),
+    rows: Q.map(q => Object.assign({ q: `${q} ${KAT[q]}` }, ...DATA.baris.map((r, i) => ({ ["c" + i]: r.per_q[q] ? `${r.per_q[q].benar}/${r.per_q[q].n}` : "" })))) });
+  tabel($("#ak-g"), { judul: "Tidak sesuai kriteria", berkas: "gagal-14b", cari: false,
+    kol: [{ key: "pengguna", label: "Pengguna", num: true }, { key: "k", label: "Setelan" }, { key: "q", label: "Pertanyaan" }, { key: "status", label: "Status" },
+      { key: "detik", label: "Lama (dtk)", num: true, f: v => nf(v) }, { key: "a", label: "Alat dipakai" }],
+    rows: DATA.gagal.map(g => ({ pengguna: g.pengguna, k: NAMA_K(g.konfig), q: `${g.kode} ${g.kategori}`, status: ({ ok: "selesai, kriteria tidak terpenuhi", "waktu-habis": "habis waktu", kosong: "jawaban kosong", galat: "galat" })[g.status] || g.status, detik: g.detik, a: g.alat.length ? g.alat.join(" → ") : "tidak ada" })) });
+}
+
+/* ======================= METODE */
+function vMetode() {
+  $("#v-metode").innerHTML = `<h2 style="margin-top:0">Cara uji kapasitas</h2>
+  <div class="card"><h3>Sumber data</h3><div id="mt-s"></div></div>
+  <div class="card"><h3>Cara uji</h3><ul>
+    <li>Skrip <code>scripts/profil-alur-agent.mts</code>, opsi <code>--concurrency</code>. Tiap pengguna berjalan bersamaan dan bertanya 3 kali berurutan dengan jeda 5 detik, jadi angka "pengguna" adalah pengguna aktif, bukan jumlah permintaan.</li>
+    <li>Pertanyaan Q1–Q8 dibagi bergiliran dengan titik awal acak tetap per tahap, sehingga tiap jenis muncul hampir sama banyak (di 16 pengguna tepat 6 kali).</li>
+    <li>Sebelum tiap tahap ada jeda 120 detik, dan skrip menunggu sampai antrean vLLM kosong. Batas 300 detik per pertanyaan.</li>
+    <li>Setelan tiap salinan model (max-num-seqs, max-model-len, image) dibaca langsung dari container saat uji dimulai, lalu dicatat bersama hasil.</li>
+  </ul></div>
+  <div class="card"><h3>Batasan</h3><ul>
+    <li>Satu kali uji per tahap. Tahap 10–20 pengguna berisi 30–60 pertanyaan, jadi P99 sensitif terhadap satu-dua pertanyaan lambat.</li>
+    <li>Pertanyaan yang habis waktu tidak dibatalkan di server; model menyelesaikannya dan tetap memakai slot. Perilaku ini sama di semua uji.</li>
+    <li>Agent berjalan di laptop. Koneksi ke database perusahaan dibatasi 4 sekaligus, dan pencarian SOP (embedding) berjalan di CPU laptop. Keduanya dicatat terpisah dari waktu model; di 20 pengguna gabungannya masih di bawah 1 detik per pertanyaan.</li>
+    <li>Di 10–20 pengguna, 97% panggilan model berhasil dipasangkan ke catatan LiteLLM (banyak panggilan dimulai hampir bersamaan). Total token per tahap tetap lengkap karena dihitung dari semua catatan.</li>
+    <li>Biaya per pertanyaan dihitung dari tarif server dibagi pertanyaan tuntas per jam. Itu biaya kalau server terus dipakai setingkat tahap itu, bukan tagihan sebenarnya.</li>
+  </ul></div>`;
+  tabel($("#mt-s"), { judul: "Sumber data", berkas: "sumber-14b", cari: false,
+    kol: [{ key: "tanggal", label: "Tanggal" }, { key: "k", label: "Setelan" }, { key: "t", label: "Tahap (pengguna)" }, { key: "o", label: "Setelan dibaca dari container" }, { key: "folder", label: "Folder data", wrap: true }],
+    rows: DATA.sumber.map(s => ({ tanggal: s.tanggal, k: NAMA_K(s.konfig), t: (s.tahap || []).join(", "), o: s.dicatat_otomatis ? "ya" : "tidak (diverifikasi manual 20 Nov)", folder: s.folder })) });
+}
+
+/* ======================= NAVIGASI */
+const VIEWS = [["skala", "Skala 1–20 pengguna", vSkala], ["antrean", "Antrean & GPU", vAntrean], ["akurasi", "Ketepatan saat ramai", vAkurasi], ["metode", "Cara uji", vMetode]];
+const IKON = '<path d="M4 6h16M4 12h16M4 18h10"/>';
+const SUDAH = {};
+function buka(id, hash = true) {
+  if (!VIEWS.some(v => v[0] === id)) id = "skala";
+  VIEWS.forEach(([k]) => { $("#v-" + k).hidden = k !== id; });
+  document.querySelectorAll("[data-view]").forEach(b => { if (b.dataset.view === id) b.setAttribute("aria-current", "page"); else b.removeAttribute("aria-current"); });
+  if (!SUDAH[id]) { VIEWS.find(v => v[0] === id)[2](); SUDAH[id] = true; } else GRAFIK.forEach(gambarUlang);
+  if (hash) history.replaceState(null, "", "#" + id);
+}
+$("#nav").innerHTML = VIEWS.map(([k, t]) => `<button type="button" data-view="${k}"><svg viewBox="0 0 24 24" aria-hidden="true">${IKON}</svg>${t}</button>`).join("");
+$("#mtabs").innerHTML = VIEWS.map(([k, t]) => `<button type="button" data-view="${k}">${t}</button>`).join("");
+document.addEventListener("click", e => { const b = e.target.closest("[data-view]"); if (b) { buka(b.dataset.view); scrollTo({ top: 0 }); } });
+addEventListener("hashchange", () => buka(decodeURIComponent(location.hash.slice(1)), false));
+const temaBtn = $("#tema");
+function pasangTema(t) { document.documentElement.dataset.theme = t; temaBtn.textContent = t === "dark" ? "Tema terang" : "Tema gelap"; temaBtn.setAttribute("aria-pressed", t === "dark"); try { localStorage.setItem("tema-dashboard", t); } catch (e) { } GRAFIK.forEach(gambarUlang); }
+temaBtn.addEventListener("click", () => pasangTema(document.documentElement.dataset.theme === "dark" ? "light" : "dark"));
+pasangTema(document.documentElement.dataset.theme === "dark" ? "dark" : "light");
+function renderSemua() { VIEWS.forEach(([k, , f]) => { if (!SUDAH[k]) { const el = $("#v-" + k), h = el.hidden; el.hidden = false; f(); SUDAH[k] = true; el.hidden = h; } }); }
+$("#cetak").addEventListener("click", () => { renderSemua(); setTimeout(() => print(), 50); });
+addEventListener("beforeprint", () => { renderSemua(); VIEWS.forEach(([k]) => { const el = $("#v-" + k); el.dataset.hid = el.hidden; el.hidden = false; }); GRAFIK.forEach(g => { g.el.innerHTML = g.gambar(1000); }); });
+addEventListener("afterprint", () => { VIEWS.forEach(([k]) => { const el = $("#v-" + k); el.hidden = el.dataset.hid === "true"; }); GRAFIK.forEach(gambarUlang); });
+$("#foot").innerHTML = `Laporan tetap, dibuat ${esc(DATA.dibuat)} oleh <code>scripts/laporan-skala-14b.py</code>. Halaman ini tidak terhubung ke server mana pun, dan tidak memuat isi jawaban model.`;
+buka(decodeURIComponent(location.hash.slice(1)) || "skala", false);
+</script>
+</body>
+</html>

@@ -59,7 +59,7 @@ PREPARE p FROM @sql; EXECUTE p; DEALLOCATE PREPARE p;
 -- ============================================================
 -- ⚠️ INI SATU-SATUNYA CARA TAHU SIAPA MENGAKU SIAPA.
 --
--- Akun email dipakai bersama — `unregisted@mustika-ratu.co.id` menempel pada
+-- Akun email dipakai bersama — `<akun-email-bersama>` menempel pada
 -- 307 karyawan — dan itu bawaan sistem perusahaan yang tidak bisa kita ubah.
 -- Artinya orang yang tahu satu password bersama bisa memilih profil siapa pun
 -- di antara 307 nama itu.

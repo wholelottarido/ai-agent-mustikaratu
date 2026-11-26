@@ -1,6 +1,6 @@
 # Pemetaan Database Perusahaan (Demo) — 29 September 2026
 
-**Sumber:** PostgreSQL 18.6 · `mustika_ratu_dev` · `157.20.255.29:5432`
+**Sumber:** PostgreSQL 18.6 · `mustika_ratu_dev` · `<IP-SERVER-DB>:5432`
 **Akses:** user `postgres` (superuser) — seluruh query hari ini HANYA BACA katalog
 
 ---

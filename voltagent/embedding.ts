@@ -14,6 +14,7 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { env, pipeline, type FeatureExtractionPipeline } from "@huggingface/transformers";
+import { rentang } from "@/lib/profil-agent";
 
 /**
  * Simpan model DI LUAR project.
@@ -132,6 +133,11 @@ function ambilPipa(): Promise<FeatureExtractionPipeline> {
  * sekaligus 8,1 detik, satu per satu 6,9 detik.
  */
 export async function embed(teks: string[]): Promise<number[][]> {
+  // Profiling (mati bawaan): span "embedding". Saat mati, rentang() langsung memanggil isinya.
+  return rentang("embedding", "embed", () => embedIsi(teks), { n_teks: teks.length });
+}
+
+async function embedIsi(teks: string[]): Promise<number[][]> {
   const p = await ambilPipa();
 
   const vektor: number[][] = [];

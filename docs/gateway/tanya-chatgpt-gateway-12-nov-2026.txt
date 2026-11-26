@@ -1,0 +1,81 @@
+PERTANYAAN: MR AI Gateway (LiteLLM di AWS) tidak bisa dihubungi dari laptop lewat SSH tunnel
+Tanggal: 12 November 2026
+(Tidak ada API key, kata sandi, atau alamat server di dokumen ini.)
+
+==================================================================
+1. GAMBARAN SISTEM
+==================================================================
+- Server: AWS EC2 GPU, region Jakarta (ap-southeast-3).
+- Di server: Docker berisi vLLM (model Qwen3-14B-AWQ dan Qwen3.5-35B), LiteLLM sebagai API
+  gateway (port 4000), dan PostgreSQL untuk LiteLLM. Port inference vLLM hanya dibuka di
+  127.0.0.1 pada server.
+- Laptop: Windows 11, PowerShell 5.1, Node.js 24.
+- Akses dari laptop ke gateway lewat SSH tunnel (local port forwarding) ke 127.0.0.1:4000.
+  Tunnel dijalankan manual dengan private key .pem.
+- Pemakai gateway di laptop:
+  a. Portal web Next.js (VoltAgent + AI SDK), base URL http://127.0.0.1:4000/v1, model
+     "qwen35-35b" dan "qwen3-14b", masing-masing dengan virtual key LiteLLM sendiri.
+  b. Ekstensi VS Code "Continue":
+     - Qwen3.5 35B -> apiBase http://127.0.0.1:4000/v1, contextLength 16384, maxTokens 2048
+     - Qwen3 14B  -> apiBase https://<acak>.trycloudflare.com/v1 (Cloudflare quick tunnel),
+                     contextLength 16384, maxTokens 2048
+
+==================================================================
+2. GEJALA HARI INI
+==================================================================
+- Continue menjalankan uji alur multi-agent portal, hasilnya "1 lolos, 4 gagal", lalu Continue
+  menampilkan "Message exceeds context limit".
+- Uji yang sama dijalankan langsung di laptop: semua permintaan ke gateway gagal dengan
+  ECONNREFUSED (24 kali, 0 berhasil).
+- Pemilik proyek menyebut status gateway "healthy", tetapi dari laptop yang sama tetap tidak
+  tersambung.
+
+==================================================================
+3. YANG SUDAH DICEK DI LAPTOP (12 Nov 2026)
+==================================================================
+  curl http://127.0.0.1:4000/health/readiness  -> tidak ada jawaban (HTTP 000)
+  curl http://localhost:4000/health/readiness  -> tidak ada jawaban (HTTP 000)
+  curl http://[::1]:4000/health/readiness      -> tidak ada jawaban (HTTP 000)
+  POST /v1/chat/completions ke qwen35-35b dan qwen3-14b -> HTTP 000 (tidak tersambung)
+  netstat: tidak ada program yang mendengarkan di port 4000
+  Get-Process ssh: tidak ada proses ssh yang berjalan
+
+  Kesimpulan sementara: tunnel SSH di laptop tidak sedang berjalan. Bukan rate limit, karena
+  rate limit LiteLLM membalas HTTP 429, sedangkan ini tidak ada balasan sama sekali.
+
+==================================================================
+4. RIWAYAT TERKAIT
+==================================================================
+- 10 Nov 2026: tunnel berjalan, readiness HTTP 200 {"status":"healthy","db":"connected"}.
+  OpenSSH sempat menolak file .pem karena permission terlalu terbuka; diperbaiki dengan icacls.
+- 11 Nov 2026, pukul 15.05 dan 15.09 WIB: dua kali "Cannot connect to API: read ECONNRESET"
+  di tengah alur multi-agent (sambungan putus sebelum ada balasan). Yang sudah diuji:
+    * 18 permintaan berjeda 0-65 detik lewat fetch Node yang sama: semua berhasil.
+    * Permintaan sekitar 11 ribu token dan streaming dengan tools: berhasil.
+    * LiteLLM tidak mengirim header keep-alive khusus.
+  Penyebab ECONNRESET belum diketahui. Portal sekarang mengulang otomatis sekali kalau sambungan
+  putus sebelum ada balasan.
+- 11 Nov 2026: virtual key qwen3-14b pernah membalas
+  "429 Rate limit exceeded for api_key ..." saat model memanggil tool berulang kali.
+  Satu pertanyaan multi-agent bisa butuh 5-15 permintaan ke model.
+
+==================================================================
+5. PERTANYAAN
+==================================================================
+1. Bagaimana cara memastikan SSH tunnel (local port forwarding) di Windows benar-benar aktif
+   dan tetap hidup? Perlukah opsi seperti ServerAliveInterval / ServerAliveCountMax, atau
+   menjalankannya sebagai layanan (misalnya autossh atau setara di Windows)?
+2. Apa perintah SSH yang benar untuk forward 127.0.0.1:4000 di laptop ke LiteLLM di EC2 yang
+   berjalan di Docker, dan bagaimana mengecek dari sisi server bahwa LiteLLM mendengarkan di
+   alamat yang bisa dijangkau tunnel?
+3. Apa kemungkinan penyebab "read ECONNRESET" sesaat (bukan ECONNREFUSED) pada sambungan lewat
+   SSH tunnel ke LiteLLM, dan log apa yang perlu dilihat di server (sshd, LiteLLM, Docker)
+   untuk membuktikannya?
+4. Untuk agent multi-langkah, berapa pengaturan rate limit (RPM/TPM, max_parallel_requests)
+   virtual key LiteLLM yang wajar, dan di mana mengeceknya?
+5. Apakah aman memakai Cloudflare quick tunnel (trycloudflare.com) untuk mengekspos LiteLLM,
+   dan apa alternatif yang lebih aman untuk akses tim (misalnya named tunnel dengan Access,
+   VPN, atau HTTPS dengan domain sendiri)?
+6. Di ekstensi Continue, "Message exceeds context limit" muncul setelah keluaran terminal yang
+   panjang dengan contextLength 16384 dan maxTokens 2048. Apakah benar penyebabnya total
+   percakapan melebihi sekitar 14 ribu token, dan bagaimana mencegahnya selain memulai sesi baru?

@@ -48,7 +48,37 @@ export type PesanTersimpan = {
   jumlah_tiket: number | null;
   /** Kode dokumen SOP, dipisah koma. Untuk tombol buka PDF. */
   sop_dipakai: string | null;
+  /** Daftar pilihan produk (JSON) untuk tombol. `null` = tidak ada atau pesan lama. */
+  klarifikasi: string | null;
 };
+
+/**
+ * Apakah kolom `klarifikasi` sudah ada? Alasannya sama dengan
+ * `punyaKolomRujukan` di bawah: migrasinya dijalankan manual sebagai root, dan
+ * kolom yang belum ada tidak boleh menggagalkan seluruh riwayat percakapan.
+ */
+let adaKolomKlarifikasi: boolean | undefined;
+async function punyaKolomKlarifikasi(): Promise<boolean> {
+  if (adaKolomKlarifikasi === undefined) {
+    try {
+      const [r] = await pool().query<mysql.RowDataPacket[]>(
+        `SELECT COUNT(*) AS n FROM information_schema.COLUMNS
+          WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'pesan'
+            AND COLUMN_NAME = 'klarifikasi'`,
+      );
+      adaKolomKlarifikasi = Number(r[0]?.n ?? 0) > 0;
+      if (!adaKolomKlarifikasi) {
+        console.warn(
+          "[percakapan] kolom klarifikasi belum ada — jalankan db/portal/22_pesan_klarifikasi.sql. " +
+            "Sampai itu, tombol pilih produk hilang di percakapan yang dimuat ulang.",
+        );
+      }
+    } catch {
+      adaKolomKlarifikasi = false;
+    }
+  }
+  return adaKolomKlarifikasi;
+}
 
 /**
  * Apakah kolom rujukan (Tahap 16D) sudah ada di tabel `pesan`?
@@ -125,9 +155,10 @@ export async function isiPercakapan(
   if (head.length === 0) return null;
 
   const lengkap = await punyaKolomRujukan();
-  const kolomRujukan = lengkap
+  const adaPilihan = await punyaKolomKlarifikasi();
+  const kolomRujukan = (lengkap
     ? ", jumlah_dokumen, jumlah_kb, jumlah_tiket, sop_dipakai"
-    : "";
+    : "") + (adaPilihan ? ", klarifikasi" : "");
   const [rows] = await pool().query<mysql.RowDataPacket[]>(
     `SELECT id, peran, teks, model, detik, jumlah_query,
             token_masuk, token_keluar, sumber, sql_dipakai${kolomRujukan}
@@ -141,6 +172,7 @@ export async function isiPercakapan(
     jumlah_kb: null,
     jumlah_tiket: null,
     sop_dipakai: null,
+    klarifikasi: null,
     ...r,
   })) as PesanTersimpan[];
   return { judul: head[0].judul as string, pesan };
@@ -246,6 +278,8 @@ export async function simpanPesan(
     jumlahTiket?: number | null;
     /** Kode dokumen SOP, dipisah koma. */
     sopDipakai?: string | null;
+    /** Daftar pilihan produk, sudah dalam bentuk JSON. */
+    klarifikasi?: string | null;
   },
 ): Promise<void> {
   if (!(await milikDia(percakapanId, penggunaId))) return;
@@ -271,14 +305,16 @@ export async function simpanPesan(
       pesan.sopDipakai ?? null,
     );
   }
+  const adaPilihan = await punyaKolomKlarifikasi();
+  if (adaPilihan) nilai.push(pesan.klarifikasi ?? null);
 
   await pool().query(
     `INSERT INTO pesan
        (percakapan_id, peran, teks, model, detik, jumlah_query,
         token_masuk, token_keluar, sumber, sql_dipakai${
           lengkap ? ", jumlah_dokumen, jumlah_kb, jumlah_tiket, sop_dipakai" : ""
-        })
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?${lengkap ? ", ?, ?, ?, ?" : ""})`,
+        }${adaPilihan ? ", klarifikasi" : ""})
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?${lengkap ? ", ?, ?, ?, ?" : ""}${adaPilihan ? ", ?" : ""})`,
     nilai,
   );
 

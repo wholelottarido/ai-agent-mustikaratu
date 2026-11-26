@@ -1,0 +1,10 @@
+import { deretSku, bulanTerakhirData } from "@/lib/ramalan/deret";
+import { ramalkan } from "@/lib/ramalan/pilih";
+const akhir = await bulanTerakhirData();
+const d = await deretSku("1006000");
+if (!d.ok) throw new Error("gagal");
+const t0 = Date.now();
+const h = ramalkan(d.deret, 3, undefined, akhir ?? undefined);
+console.log(`1 produk (${d.deret.bulan.length} bulan) = ${((Date.now() - t0) / 1000).toFixed(1)} detik`);
+console.log(`model terpilih: ${h.qty.ok ? h.qty.terpilih.kode : "-"}  wape=${h.qty.ok ? h.qty.terpilih.wape : "-"}`);
+process.exit(0);

@@ -1,7 +1,7 @@
 -- ============================================================
 -- User PostgreSQL READ-ONLY untuk agent
 -- ============================================================
--- Database : mustika_ratu_dev @ 157.20.255.29
+-- Database : mustika_ratu_dev @ <IP-SERVER-DB>
 -- Dijalankan sebagai: postgres (superuser)
 --
 -- ⚠️ INI MENGUBAH SERVER PERUSAHAAN, BUKAN LAPTOP SENDIRI.
